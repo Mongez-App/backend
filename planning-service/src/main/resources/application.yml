@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: planning-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/planning_db
+    username: smartstudy
+    password: smartstudy
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: smartstudy
+    password: smartstudy
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

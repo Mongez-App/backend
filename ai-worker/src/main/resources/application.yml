@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: ai-worker
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ai_db
+    username: smartstudy
+    password: smartstudy
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: smartstudy
+    password: smartstudy
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# TODO: LLM provider credentials (e.g. GEMINI_API_KEY) come from env vars — never commit keys.

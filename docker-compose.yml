@@ -1,0 +1,36 @@
+services:
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: smartstudy-postgres
+    environment:
+      POSTGRES_USER: smartstudy
+      POSTGRES_PASSWORD: smartstudy
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartstudy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: smartstudy-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: smartstudy
+      RABBITMQ_DEFAULT_PASS: smartstudy
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

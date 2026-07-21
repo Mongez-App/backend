@@ -4,6 +4,7 @@ import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.dto.response.ProfileDetailsResponse;
 import com.smartstudy.identity.dto.response.ProfileResponse;
 import com.smartstudy.identity.dto.response.ProfileStatsResponse;
+import com.smartstudy.identity.dto.response.UserResponse;
 import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.util.FieldMappingUtil;
 import org.mapstruct.Mapper;
@@ -24,6 +25,8 @@ public interface UserMapper {
     @Mapping(target = "appearance", source = "appearance", qualifiedByName = "appearanceToContract")
     @Mapping(target = "language", source = "language", qualifiedByName = "languageToContract")
     ProfileDetailsResponse toProfileDetailsResponse(User user);
+
+    UserResponse toUserResponse(User user);
 
     @Named("appearanceToContract")
     default String appearanceToContract(String internalValue) {

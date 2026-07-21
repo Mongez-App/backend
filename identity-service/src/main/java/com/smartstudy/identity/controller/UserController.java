@@ -1,18 +1,24 @@
 package com.smartstudy.identity.controller;
 
+import com.smartstudy.identity.dto.request.CreateUserRequest;
 import com.smartstudy.identity.dto.request.UpdateProfileRequest;
 import com.smartstudy.identity.dto.response.ProfileResponse;
 import com.smartstudy.identity.dto.response.UpdateProfileResponse;
+import com.smartstudy.identity.dto.response.UserResponse;
 import com.smartstudy.identity.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/users")
@@ -54,5 +60,16 @@ public class UserController {
         String uid = getFirebaseUid();
         userService.deleteUser(uid);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping
+    public ResponseEntity<UserResponse> createUser(
+            @Valid @RequestBody CreateUserRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.createUser(request));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        return ResponseEntity.ok(userService.getAllUsers());
     }
 }

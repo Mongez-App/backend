@@ -53,6 +53,7 @@ public class CourseService {
                 .userId(userId)
                 .name(request.name())
                 .courseCode(request.courseCode())
+                .imageUrl(request.imageUrl())
                 .startDate(request.startDate())
                 .examDate(request.examDate())
                 .hasMaterials(Boolean.TRUE.equals(request.hasMaterials()))
@@ -71,6 +72,9 @@ public class CourseService {
         }
         if (request.courseCode() != null) {
             course.setCourseCode(request.courseCode());
+        }
+        if (request.imageUrl() != null) {
+            course.setImageUrl(request.imageUrl());
         }
         if (request.startDate() != null) {
             course.setStartDate(request.startDate());
@@ -141,6 +145,7 @@ public class CourseService {
                 course.getId(),
                 course.getName(),
                 course.getCourseCode(),
+                course.getImageUrl(),
                 course.getStartDate(),
                 course.getExamDate(),
                 materialRepository.countByCourseIdAndUserId(course.getId(), userId) > 0 || course.isHasMaterials(),

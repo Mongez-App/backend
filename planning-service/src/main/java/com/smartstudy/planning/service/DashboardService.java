@@ -40,6 +40,7 @@ public class DashboardService {
         DashboardResponse.TodayFocusResponse focus = new DashboardResponse.TodayFocusResponse(
                 focusCourse != null ? focusCourse.getId() : null,
                 focusCourse != null ? focusCourse.getName() : null,
+                focusCourse != null ? focusCourse.getImageUrl() : null,
                 formatDuration((int) todayMinutes),
                 (int) todayMinutes);
 

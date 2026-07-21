@@ -22,25 +22,20 @@ spring:
           lower-case-service-id: true
       routes:
         - id: identity-service
-          uri: lb://IDENTITY-SERVICE
+          uri: lb://identity-service
           predicates:
-            - Path=/api/v1/auth/**
-            - Path=/api/v1/users/**
+            - Path=/api/v1/auth/**, /api/v1/users/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker
               args:
                 name: identityCircuitBreaker
                 fallbackUri: forward:/fallback/identity
+
         - id: planning-service
-          uri: lb://PLANNING-SERVICE
+          uri: lb://planning-service
           predicates:
-            - Path=/api/v1/tasks/**
-            - Path=/api/v1/courses/**
-            - Path=/api/v1/roadmap/**
-            - Path=/api/v1/sessions/**
-            - Path=/api/v1/auth/calendar/**
-            - Path=/api/v1/home/**
+            - Path=/api/v1/tasks/**, /api/v1/courses/**, /api/v1/roadmap/**, /api/v1/sessions/**, /api/v1/auth/calendar/**, /api/v1/home/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker

@@ -6,21 +6,22 @@ spring:
       circuitbreaker:
         enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5432/identity_db
-    username: smartstudy
-    password: smartstudy
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${IDENTITY_DB_NAME:identity_db}
+    username: ${POSTGRES_USER:smartstudy}
+    password: ${POSTGRES_PASSWORD:smartstudy}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     open-in-view: false
 
 server:
-  port: 8081
+  port: ${PORT:8081}
+  address: 0.0.0.0
 
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:

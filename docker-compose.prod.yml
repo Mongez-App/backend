@@ -6,8 +6,6 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-smartstudy}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstudy}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - pgdata:/var/lib/postgresql/data
@@ -22,11 +20,12 @@ services:
       context: .
       dockerfile: eureka/Dockerfile
     container_name: smartstudy-eureka
-    ports:
-      - "8761:8761"
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8761}
+      - SERVER_ADDRESS=0.0.0.0
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_ENABLE_SELF_PRESERVATION=false
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,10 +40,10 @@ services:
       context: .
       dockerfile: api-gateway/Dockerfile
     container_name: smartstudy-api-gateway
-    ports:
-      - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8080}
+      - SERVER_ADDRESS=0.0.0.0
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
     depends_on:
       eureka:
@@ -55,12 +54,12 @@ services:
       context: .
       dockerfile: identity-service/Dockerfile
     container_name: smartstudy-identity-service
-    ports:
-      - "8081:8081"
     volumes:
       - ./credentials:/app/credentials:ro
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8081}
+      - SERVER_ADDRESS=0.0.0.0
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
@@ -79,10 +78,10 @@ services:
       context: .
       dockerfile: planning-service/Dockerfile
     container_name: smartstudy-planning-service
-    ports:
-      - "8082:8082"
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8082}
+      - SERVER_ADDRESS=0.0.0.0
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
@@ -100,10 +99,10 @@ services:
       context: .
       dockerfile: notification-service/Dockerfile
     container_name: smartstudy-notification-service
-    ports:
-      - "8084:8084"
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8084}
+      - SERVER_ADDRESS=0.0.0.0
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-smartstudy}

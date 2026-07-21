@@ -2,26 +2,22 @@ spring:
   application:
     name: notification-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: smartstudy
-    password: smartstudy
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${NOTIFICATION_DB_NAME:notification_db}
+    username: ${POSTGRES_USER:smartstudy}
+    password: ${POSTGRES_PASSWORD:smartstudy}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     open-in-view: false
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: smartstudy
-    password: smartstudy
 
 server:
-  port: 8084
+  port: ${PORT:8084}
+  address: 0.0.0.0
 
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:

@@ -25,7 +25,6 @@ public class UserServiceImpl implements UserService {
     private final UserPreferenceRepository userPreferenceRepository;
     private final PlanningServiceClient planningServiceClient;
     private final UserMapper userMapper;
-    private final org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
 
     @Override
     public ProfileResponse getProfile(String firebaseUid) {
@@ -139,12 +138,5 @@ public class UserServiceImpl implements UserService {
         userPreferenceRepository.flush();
         userRepository.delete(user);
         userRepository.flush();
-        
-        com.smartstudy.identity.dto.UserDeletedEvent event = new com.smartstudy.identity.dto.UserDeletedEvent(firebaseUid, System.currentTimeMillis());
-        try {
-            rabbitTemplate.convertAndSend(com.smartstudy.identity.config.RabbitMQConfig.EXCHANGE_NAME, com.smartstudy.identity.config.RabbitMQConfig.ROUTING_KEY, event);
-        } catch (org.springframework.amqp.AmqpException e) {
-            throw new com.smartstudy.shared.exception.BadRequestException("SERVICE_UNAVAILABLE", "Failed to publish user deletion event.");
-        }
     }
 }

@@ -20,6 +20,7 @@ public record DashboardResponse(
     public record TodayFocusResponse(
             @JsonProperty("course_id") UUID courseId,
             @JsonProperty("course_name") String courseName,
+            @JsonProperty("image_url") String imageUrl,
             @JsonProperty("allocated_duration") String allocatedDuration,
             @JsonProperty("duration_minutes") Integer durationMinutes
     ) {

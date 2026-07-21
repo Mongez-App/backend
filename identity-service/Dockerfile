@@ -5,7 +5,7 @@ COPY . .
 RUN mvn clean package -pl :identity-service -am -DskipTests
 
 # Run Stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/identity-service/target/identity-service-*.jar app.jar
 EXPOSE 8081

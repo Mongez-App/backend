@@ -65,6 +65,7 @@ spring:
 
 firebase:
   credentials-path: ${FIREBASE_CREDENTIALS:}
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
 
 eureka:
   client:

@@ -1,0 +1,64 @@
+package com.smartstudy.planning.service;
+
+import com.smartstudy.planning.dto.request.EndSessionRequest;
+import com.smartstudy.planning.dto.request.StartSessionRequest;
+import com.smartstudy.planning.dto.response.AlertResponse;
+import com.smartstudy.planning.dto.response.SessionResponse;
+import com.smartstudy.planning.model.StudySession;
+import com.smartstudy.planning.model.Task;
+import com.smartstudy.planning.repository.StudySessionRepository;
+import com.smartstudy.planning.repository.TaskRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class SessionService {
+
+    private final CourseService courseService;
+    private final StudySessionRepository studySessionRepository;
+    private final TaskRepository taskRepository;
+
+    @Transactional
+    public SessionResponse startSession(String userId, StartSessionRequest request) {
+        courseService.getOwnedCourse(userId, request.courseId());
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .courseId(request.courseId())
+                .linkedTaskId(request.linkedTaskId())
+                .estimatedDurationMinutes(request.estimatedDurationMinutes())
+                .build();
+        StudySession saved = studySessionRepository.save(session);
+        return new SessionResponse(saved.getId(), saved.getCourseId(), saved.getLinkedTaskId(),
+                saved.getStartedAt(), null, null, null);
+    }
+
+    @Transactional
+    public SessionResponse endSession(String userId, UUID sessionId, EndSessionRequest request) {
+        StudySession session = studySessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND"));
+        Instant endedAt = Instant.now();
+        int minutes = Math.max(1, (int) Duration.between(session.getStartedAt(), endedAt).toMinutes());
+        session.setEndedAt(endedAt);
+        session.setDurationMinutesLogged(minutes);
+        session.setTaskCompleted(request.taskCompleted());
+
+        AlertResponse alert = null;
+        if (Boolean.TRUE.equals(request.taskCompleted()) && session.getLinkedTaskId() != null) {
+            Task task = taskRepository.findByIdAndUserId(session.getLinkedTaskId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND"));
+            task.setCompleted(true);
+            alert = new AlertResponse("Great job - '" + task.getTitle() + "' marked complete on your roadmap.");
+        }
+
+        return new SessionResponse(session.getId(), session.getCourseId(), session.getLinkedTaskId(),
+                session.getStartedAt(), minutes, request.taskCompleted(), alert);
+    }
+}

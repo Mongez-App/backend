@@ -40,6 +40,11 @@ spring:
               args:
                 name: notificationCircuitBreaker
                 fallbackUri: forward:/fallback/notification
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
+
+firebase:
+  credentials-path: ${FIREBASE_CREDENTIALS:}
 
 eureka:
   client:

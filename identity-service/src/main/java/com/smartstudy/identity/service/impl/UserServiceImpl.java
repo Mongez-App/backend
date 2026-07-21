@@ -2,20 +2,26 @@ package com.smartstudy.identity.service.impl;
 
 import com.smartstudy.identity.client.PlanningServiceClient;
 import com.smartstudy.identity.dto.UserMapper;
+import com.smartstudy.identity.dto.request.CreateUserRequest;
 import com.smartstudy.identity.dto.request.UpdateProfileRequest;
 import com.smartstudy.identity.dto.response.ProfileResponse;
 import com.smartstudy.identity.dto.response.ProfileStatsResponse;
 import com.smartstudy.identity.dto.response.UpdateProfileResponse;
+import com.smartstudy.identity.dto.response.UserResponse;
 import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.model.UserPreference;
 import com.smartstudy.identity.repository.UserPreferenceRepository;
 import com.smartstudy.identity.repository.UserRepository;
 import com.smartstudy.identity.service.UserService;
 import com.smartstudy.shared.exception.BadRequestException;
+import com.smartstudy.shared.exception.ConflictException;
 import com.smartstudy.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -138,5 +144,39 @@ public class UserServiceImpl implements UserService {
         userPreferenceRepository.flush();
         userRepository.delete(user);
         userRepository.flush();
+    }
+
+    @Override
+    @Transactional
+    public UserResponse createUser(CreateUserRequest request) {
+        if (request.email() == null || request.email().trim().isEmpty()) {
+            throw new BadRequestException("INVALID_EMAIL", "Email is required.");
+        }
+
+        String normalizedEmail = request.email().trim().toLowerCase();
+
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new ConflictException("EMAIL_EXISTS", "A user with this email already exists.");
+        }
+
+        User user = User.builder()
+                .id(UUID.randomUUID().toString())
+                .email(normalizedEmail)
+                .name(request.name() != null ? request.name().trim() : null)
+                .isGuest(request.isGuest() != null ? request.isGuest() : false)
+                .build();
+
+        userRepository.save(user);
+
+        return userMapper.toUserResponse(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(userMapper::toUserResponse)
+                .toList();
     }
 }

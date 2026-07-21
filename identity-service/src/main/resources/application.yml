@@ -22,10 +22,10 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
-    register-with-eureka: true
-    fetch-registry: true
+    register-with-eureka: false
+    fetch-registry: false
   instance:
-    prefer-ip-address: true
+    prefer-ip-address: false
 
 management:
   endpoints:
@@ -34,4 +34,4 @@ management:
         include: health,info
 
 firebase:
-  credentials-path: ${FIREBASE_CREDENTIALS:}
+  credentials-path: ${FIREBASE_CREDENTIALS:/app/credentials/firebase-admin.json}

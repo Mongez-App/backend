@@ -14,8 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -43,20 +41,34 @@ public class AuthServiceImpl implements AuthService {
         String name = firebaseToken.getName();
         String avatarUrl = firebaseToken.getPicture();
 
-        return userRepository.findById(uid)
-                .map(existingUser -> {
-                    return userMapper.toHandshakeResponse(existingUser, false);
-                })
-                .orElseGet(() -> {
-                    User newUser = User.builder()
-                            .id(uid)
-                            .email(email)
-                            .name(name)
-                            .avatarUrl(avatarUrl)
-                            .isGuest(request.isGuest() != null ? request.isGuest() : false)
-                            .build();
-                    userRepository.save(newUser);
-                    return userMapper.toHandshakeResponse(newUser, true);
-                });
+        // 1. Primary lookup: find existing user by Firebase UID
+        var existingById = userRepository.findById(uid);
+        if (existingById.isPresent()) {
+            return userMapper.toHandshakeResponse(existingById.get(), false);
+        }
+
+        // 2. Fallback lookup: find existing user by email
+        //    Handles the case where the same person authenticates via a different
+        //    Firebase auth provider (different UID, same email).
+        var existingByEmail = userRepository.findByEmail(email);
+        if (existingByEmail.isPresent()) {
+            User user = existingByEmail.get();
+            user.setId(uid);
+            user.setName(name);
+            user.setAvatarUrl(avatarUrl);
+            userRepository.save(user);
+            return userMapper.toHandshakeResponse(user, false);
+        }
+
+        // 3. No existing user found — create a new one
+        User newUser = User.builder()
+                .id(uid)
+                .email(email)
+                .name(name)
+                .avatarUrl(avatarUrl)
+                .isGuest(request.isGuest() != null ? request.isGuest() : false)
+                .build();
+        userRepository.save(newUser);
+        return userMapper.toHandshakeResponse(newUser, true);
     }
 }

@@ -13,6 +13,7 @@ import com.smartstudy.identity.repository.UserRepository;
 import com.smartstudy.identity.service.UserService;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.exception.NotFoundException;
+import com.smartstudy.identity.util.FieldMappingUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,18 +56,20 @@ public class UserServiceImpl implements UserService {
         }
 
         if (request.appearance() != null) {
-            String appearance = request.appearance().toUpperCase();
-            if (!appearance.equals("LIGHT") && !appearance.equals("DARK") && !appearance.equals("SYSTEM")) {
-                throw new BadRequestException("INVALID_APPEARANCE", "Appearance must be 'LIGHT', 'DARK', or 'SYSTEM'.");
+            String appearance = FieldMappingUtil.appearanceToInternal(request.appearance());
+            if (appearance == null) {
+                throw new BadRequestException("INVALID_APPEARANCE",
+                        "Appearance must be " + FieldMappingUtil.validAppearanceValues() + ".");
             }
             user.setAppearance(appearance);
             hasUpdates = true;
         }
 
         if (request.language() != null) {
-            String language = request.language().toLowerCase();
-            if (!language.equals("en") && !language.equals("ar")) {
-                throw new BadRequestException("INVALID_LANGUAGE", "Language must be 'en' or 'ar'.");
+            String language = FieldMappingUtil.languageToInternal(request.language());
+            if (language == null) {
+                throw new BadRequestException("INVALID_LANGUAGE",
+                        "Language must be " + FieldMappingUtil.validLanguageValues() + ".");
             }
             user.setLanguage(language);
             hasUpdates = true;

@@ -21,7 +21,9 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
   instance:
-    prefer-ip-address: true
+    prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:planning-service.railway.internal}
+
 
 management:
   endpoints:

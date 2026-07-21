@@ -9,7 +9,6 @@ import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -42,12 +41,7 @@ public class AuthController {
             @Valid @RequestBody HandshakeRequest request) {
         
         HandshakeResponse response = authService.handshake(authorization, request);
-        
-        if (response.isNewUser()) {
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } else {
-            return ResponseEntity.ok(response);
-        }
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/calendar/status")

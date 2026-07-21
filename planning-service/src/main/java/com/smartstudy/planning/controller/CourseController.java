@@ -8,8 +8,10 @@ import com.smartstudy.planning.dto.response.CreateMaterialResponse;
 import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.service.CourseService;
+import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,10 +32,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CourseController {
 
+    private static final Logger log = LoggerFactory.getLogger(CourseController.class);
     private final CourseService courseService;
 
     @GetMapping
     public List<CourseResponse> getCourses(@RequestHeader("X-User-Id") String userId) {
+        log.info("Incoming request: GET /courses | userId: {}", userId);
         return courseService.getCourses(userId);
     }
 
@@ -41,6 +45,7 @@ public class CourseController {
     public CourseResponse getCourse(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
+        log.info("Incoming request: GET /courses/{} | userId: {}", courseId, userId);
         return courseService.getCourse(userId, courseId);
     }
 
@@ -49,6 +54,7 @@ public class CourseController {
     public CourseResponse createCourse(
             @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody CreateCourseRequest request) {
+        log.info("Incoming request: POST /courses | userId: {}", userId);
         return courseService.createCourse(userId, request);
     }
 
@@ -57,6 +63,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request) {
+        log.info("Incoming request: PATCH /courses/{} | userId: {}", courseId, userId);
         return courseService.updateCourse(userId, courseId, request);
     }
 
@@ -64,6 +71,7 @@ public class CourseController {
     public StatusResponse deleteCourse(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
+        log.info("Incoming request: DELETE /courses/{} | userId: {}", courseId, userId);
         return courseService.deleteCourse(userId, courseId);
     }
 
@@ -71,6 +79,7 @@ public class CourseController {
     public List<MaterialResponse> getMaterials(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
+        log.info("Incoming request: GET /courses/{}/materials | userId: {}", courseId, userId);
         return courseService.getMaterials(userId, courseId);
     }
 
@@ -79,6 +88,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId,
             @Valid @RequestBody CreateMaterialRequest request) {
+        log.info("Incoming request: POST /courses/{}/materials | userId: {}", courseId, userId);
         return courseService.createMaterial(userId, courseId, request);
     }
 
@@ -87,6 +97,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId,
             @PathVariable UUID materialId) {
+        log.info("Incoming request: DELETE /courses/{}/materials/{} | userId: {}", courseId, materialId, userId);
         return courseService.deleteMaterial(userId, courseId, materialId);
     }
 }

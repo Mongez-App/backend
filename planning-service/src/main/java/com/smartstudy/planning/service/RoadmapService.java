@@ -7,7 +7,9 @@ import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,16 +28,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RoadmapService {
 
+    private static final Logger log = LoggerFactory.getLogger(RoadmapService.class);
     private final StudyBlockRepository studyBlockRepository;
     private final CourseRepository courseRepository;
 
     @Transactional(readOnly = true)
     public RoadmapResponse getWeeklyRoadmap(String userId, LocalDate startDate) {
+        log.info("Fetching weekly roadmap for userId: {} | startDate: {}", userId, startDate);
         return buildWeeklyResponse(userId, weekStart(startDate), null);
     }
 
     @Transactional
     public RoadmapResponse reschedule(String userId, RescheduleRoadmapRequest request) {
+        log.info("Rescheduling blocks {} for userId: {}", request.blockIds(), userId);
         List<StudyBlock> blocks = studyBlockRepository.findByIdInAndUserId(request.blockIds(), userId);
         LocalDate targetDate = LocalDate.now().plusDays(1);
         blocks.forEach(block -> block.setScheduledDate(targetDate));

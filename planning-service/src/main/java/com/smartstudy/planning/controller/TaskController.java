@@ -4,8 +4,10 @@ import com.smartstudy.planning.dto.request.CreateTaskRequest;
 import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.UpdateTaskRequest;
 import com.smartstudy.planning.service.TaskService;
+import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,6 +31,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TaskController {
 
+    private static final Logger log = LoggerFactory.getLogger(TaskController.class);
     private final TaskService taskService;
 
     // X-User-Id is temporary until the Firebase token filter supplies the authenticated uid
@@ -36,6 +39,7 @@ public class TaskController {
     public List<TaskResponse> getTasks(
             @RequestHeader("X-User-Id") String userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        log.info("Incoming request: GET /tasks | userId: {}", userId);
         return taskService.getTasks(userId, date != null ? date : LocalDate.now());
     }
 
@@ -44,6 +48,7 @@ public class TaskController {
     public TaskResponse createTask(
             @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody CreateTaskRequest request) {
+        log.info("Incoming request: POST /tasks | userId: {}", userId);
         return taskService.createTask(userId, request);
     }
 
@@ -52,6 +57,7 @@ public class TaskController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID taskId,
             @Valid @RequestBody UpdateTaskRequest request) {
+        log.info("Incoming request: PATCH /tasks/{} | userId: {}", taskId, userId);
         return taskService.updateTask(userId, taskId, request);
     }
 
@@ -60,6 +66,7 @@ public class TaskController {
     public void deleteTask(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID taskId) {
+        log.info("Incoming request: DELETE /tasks/{} | userId: {}", taskId, userId);
         taskService.deleteTask(userId, taskId);
     }
 }

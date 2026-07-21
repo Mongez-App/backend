@@ -16,8 +16,10 @@ import com.smartstudy.identity.service.UserService;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.exception.ConflictException;
 import com.smartstudy.shared.exception.NotFoundException;
+import com.smartstudy.shared.logging.LoggerFactory;
 import com.smartstudy.identity.util.FieldMappingUtil;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private final UserRepository userRepository;
     private final UserPreferenceRepository userPreferenceRepository;
     private final PlanningServiceClient planningServiceClient;
@@ -35,6 +38,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public ProfileResponse getProfile(String firebaseUid) {
+        log.info("Fetching profile for uid: {}", firebaseUid);
         User user = userRepository.findById(firebaseUid)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "User profile not found. Please complete handshake first."));
 
@@ -45,6 +49,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UpdateProfileResponse updateProfile(String firebaseUid, UpdateProfileRequest request) {
+        log.info("Updating profile for uid: {}", firebaseUid);
         User user = userRepository.findById(firebaseUid)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "User not found."));
 
@@ -97,10 +102,10 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public com.smartstudy.identity.dto.response.PreferencesResponse savePreferences(String firebaseUid, com.smartstudy.identity.dto.request.SavePreferencesRequest request) {
+        log.info("Saving preferences for uid: {}", firebaseUid);
         if (!userRepository.existsById(firebaseUid)) {
             throw new NotFoundException("USER_NOT_FOUND", "User not found. Please complete handshake first.");
         }
-
 
         UserPreference preference = userPreferenceRepository.findById(firebaseUid)
                 .orElse(UserPreference.builder().userId(firebaseUid).build());
@@ -115,6 +120,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void deleteUser(String firebaseUid) {
+        log.warn("Deleting user: {}", firebaseUid);
         User user = userRepository.findById(firebaseUid)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "User not found."));
 
@@ -152,6 +158,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
+        log.info("Creating user with email: {}", request.email());
         if (request.email() == null || request.email().trim().isEmpty()) {
             throw new BadRequestException("INVALID_EMAIL", "Email is required.");
         }
@@ -177,6 +184,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
+        log.info("Fetching all users");
         return userRepository.findAll()
                 .stream()
                 .map(userMapper::toUserResponse)

@@ -6,7 +6,9 @@ import com.smartstudy.planning.dto.UpdateTaskRequest;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.planning.dto.TaskMapper;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,11 +22,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TaskService {
 
+    private static final Logger log = LoggerFactory.getLogger(TaskService.class);
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
 
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasks(String userId, LocalDate date) {
+        log.info("Fetching tasks for userId: {} | date: {}", userId, date);
         return taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
                 .stream()
                 .map(taskMapper::toResponse)
@@ -33,6 +37,7 @@ public class TaskService {
 
     @Transactional
     public TaskResponse createTask(String userId, CreateTaskRequest request) {
+        log.info("Creating task for userId: {} | title: {}", userId, request.title());
         Task task = Task.builder()
                 .userId(userId)
                 .courseId(request.courseId())
@@ -47,6 +52,7 @@ public class TaskService {
 
     @Transactional
     public TaskResponse updateTask(String userId, UUID taskId, UpdateTaskRequest request) {
+        log.info("Updating task {} for userId: {}", taskId, userId);
         Task task = getOwnedTask(userId, taskId);
         if (request.title() != null) {
             task.setTitle(request.title());
@@ -68,6 +74,7 @@ public class TaskService {
 
     @Transactional
     public void deleteTask(String userId, UUID taskId) {
+        log.info("Deleting task {} for userId: {}", taskId, userId);
         taskRepository.delete(getOwnedTask(userId, taskId));
     }
 

@@ -6,7 +6,9 @@ import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.StudySessionRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +22,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DashboardService {
 
+    private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
     private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
     private final StudySessionRepository studySessionRepository;
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(String userId) {
+        log.info("Fetching dashboard for userId: {}", userId);
         LocalDate today = LocalDate.now();
         List<Task> todayTasks = taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, today);
         long todayCompleted = todayTasks.stream().filter(Task::isCompleted).count();

@@ -8,7 +8,9 @@ import com.smartstudy.planning.model.StudySession;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.StudySessionRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,12 +24,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SessionService {
 
+    private static final Logger log = LoggerFactory.getLogger(SessionService.class);
     private final CourseService courseService;
     private final StudySessionRepository studySessionRepository;
     private final TaskRepository taskRepository;
 
     @Transactional
     public SessionResponse startSession(String userId, StartSessionRequest request) {
+        log.info("Starting session for userId: {} | courseId: {}", userId, request.courseId());
         courseService.getOwnedCourse(userId, request.courseId());
         StudySession session = StudySession.builder()
                 .userId(userId)
@@ -42,6 +46,7 @@ public class SessionService {
 
     @Transactional
     public SessionResponse endSession(String userId, UUID sessionId, EndSessionRequest request) {
+        log.info("Ending session {} for userId: {} | completed: {}", sessionId, userId, request.taskCompleted());
         StudySession session = studySessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND"));
         Instant endedAt = Instant.now();

@@ -10,7 +10,9 @@ import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.repository.UserRepository;
 import com.smartstudy.identity.service.AuthService;
 import com.smartstudy.shared.exception.UnauthorizedException;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
     private final UserRepository userRepository;
     private final UserMapper userMapper;
 
@@ -44,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
         // 1. Primary lookup: find existing user by Firebase UID
         var existingById = userRepository.findById(uid);
         if (existingById.isPresent()) {
+            log.info("Handshake: existing user found by UID - uid: {}", uid);
             return userMapper.toHandshakeResponse(existingById.get(), false);
         }
 
@@ -52,6 +56,7 @@ public class AuthServiceImpl implements AuthService {
         //    Firebase auth provider (different UID, same email).
         var existingByEmail = userRepository.findByEmail(email);
         if (existingByEmail.isPresent()) {
+            log.info("Handshake: existing user found by email - uid: {}, email: {}", uid, email);
             User user = existingByEmail.get();
             user.setId(uid);
             user.setName(name);
@@ -61,6 +66,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // 3. No existing user found — create a new one
+        log.info("Handshake: creating new user - uid: {}, email: {}", uid, email);
         User newUser = User.builder()
                 .id(uid)
                 .email(email)

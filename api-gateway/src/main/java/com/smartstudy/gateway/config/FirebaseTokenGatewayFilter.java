@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.smartstudy.shared.dto.ErrorResponse;
+import com.smartstudy.shared.logging.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -13,8 +14,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerErrorException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import org.slf4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -22,6 +25,7 @@ import java.time.Instant;
 @Component
 public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
 
+    private static final Logger log = LoggerFactory.getLogger(FirebaseTokenGatewayFilter.class);
     private final ObjectMapper objectMapper;
 
     public FirebaseTokenGatewayFilter(ObjectMapper objectMapper) {
@@ -31,7 +35,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         if (FirebaseApp.getApps().isEmpty()) {
-            return chain.filter(exchange);
+            throw new ServerErrorException("Firebase App is down", null);
         }
 
         String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
@@ -44,6 +48,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
         try {
             FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(token);
             String userId = firebaseToken.getUid();
+            log.info("Firebase token verified for user: {} on path: {}", userId, exchange.getRequest().getURI().getPath());
 
             ServerWebExchange mutatedExchange = exchange.mutate()
                     .request(exchange.getRequest().mutate()
@@ -53,6 +58,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
 
             return chain.filter(mutatedExchange);
         } catch (FirebaseAuthException e) {
+            log.warn("Invalid Firebase token for path: {}", exchange.getRequest().getURI().getPath());
             return writeUnauthorizedResponse(exchange, "Invalid or expired Firebase token");
         }
     }

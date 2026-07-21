@@ -15,7 +15,9 @@ import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CourseService {
 
+    private static final Logger log = LoggerFactory.getLogger(CourseService.class);
     private final CourseRepository courseRepository;
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
@@ -36,6 +39,7 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<CourseResponse> getCourses(String userId) {
+        log.info("Fetching courses for userId: {}", userId);
         return courseRepository.findByUserIdAndHiddenFalseOrderByCreatedAtAsc(userId)
                 .stream()
                 .map(course -> toResponse(userId, course, false, null))
@@ -44,11 +48,13 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public CourseResponse getCourse(String userId, UUID courseId) {
+        log.info("Fetching course {} for userId: {}", courseId, userId);
         return toResponse(userId, getOwnedCourse(userId, courseId), true, null);
     }
 
     @Transactional
     public CourseResponse createCourse(String userId, CreateCourseRequest request) {
+        log.info("Creating course for userId: {} | name: {}", userId, request.name());
         Course course = Course.builder()
                 .userId(userId)
                 .name(request.name())
@@ -65,6 +71,7 @@ public class CourseService {
 
     @Transactional
     public CourseResponse updateCourse(String userId, UUID courseId, UpdateCourseRequest request) {
+        log.info("Updating course {} for userId: {}", courseId, userId);
         Course course = getOwnedCourse(userId, courseId);
         if (request.name() != null) {
             course.setName(request.name());
@@ -89,6 +96,7 @@ public class CourseService {
 
     @Transactional
     public StatusResponse deleteCourse(String userId, UUID courseId) {
+        log.info("Deleting course {} for userId: {}", courseId, userId);
         Course course = getOwnedCourse(userId, courseId);
         studyBlockRepository.deleteByCourseIdAndUserId(courseId, userId);
         courseRepository.delete(course);
@@ -97,6 +105,7 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<MaterialResponse> getMaterials(String userId, UUID courseId) {
+        log.info("Fetching materials for course {} | userId: {}", courseId, userId);
         getOwnedCourse(userId, courseId);
         return materialRepository.findByCourseIdAndUserIdOrderByUploadedAtAsc(courseId, userId)
                 .stream()
@@ -106,6 +115,7 @@ public class CourseService {
 
     @Transactional
     public CreateMaterialResponse createMaterial(String userId, UUID courseId, CreateMaterialRequest request) {
+        log.info("Creating material for course {} | userId: {} | fileName: {}", courseId, userId, request.fileName());
         Course course = getOwnedCourse(userId, courseId);
         Material material = Material.builder()
                 .courseId(courseId)
@@ -125,6 +135,7 @@ public class CourseService {
 
     @Transactional
     public StatusResponse deleteMaterial(String userId, UUID courseId, UUID materialId) {
+        log.info("Deleting material {} from course {} | userId: {}", materialId, courseId, userId);
         getOwnedCourse(userId, courseId);
         materialRepository.deleteByIdAndCourseIdAndUserId(materialId, courseId, userId);
         return new StatusResponse("success",

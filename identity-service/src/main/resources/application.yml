@@ -6,9 +6,11 @@ spring:
       circuitbreaker:
         enabled: true
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${IDENTITY_DB_NAME:identity_db}
-    username: ${POSTGRES_USER:smartstudy}
-    password: ${POSTGRES_PASSWORD:smartstudy}
+    # Resolves local POSTGRES_HOST first, then Railway's PGHOST, then falls back to localhost
+    url: jdbc:postgresql://${POSTGRES_HOST:${PGHOST:localhost}}:${POSTGRES_PORT:${PGPORT:5432}}/${IDENTITY_DB_NAME:${PGDATABASE:identity_db}}
+    username: ${POSTGRES_USER:${PGUSER:smartstudy}}
+    password: ${POSTGRES_PASSWORD:${PGPASSWORD:smartstudy}}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}

@@ -5,7 +5,7 @@ COPY . .
 RUN mvn clean package -pl :eureka -am -DskipTests
 
 # Run Stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=build /app/eureka/target/eureka-*.jar app.jar

@@ -1,6 +1,10 @@
 spring:
   application:
     name: identity-service
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   datasource:
     url: jdbc:postgresql://localhost:5432/identity_db
     username: smartstudy
@@ -27,3 +31,6 @@ management:
     web:
       exposure:
         include: health,info
+
+firebase:
+  credentials-path: ${FIREBASE_CREDENTIALS:}

@@ -1,0 +1,72 @@
+package com.smartstudy.identity.controller;
+
+import com.smartstudy.identity.client.PlanningServiceClient;
+import com.smartstudy.identity.dto.request.CalendarConnectRequest;
+import com.smartstudy.identity.dto.request.HandshakeRequest;
+import com.smartstudy.identity.dto.response.CalendarConnectResponse;
+import com.smartstudy.identity.dto.response.CalendarStatusResponse;
+import com.smartstudy.identity.dto.response.HandshakeResponse;
+import com.smartstudy.identity.service.AuthService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthService authService;
+    private final PlanningServiceClient planningServiceClient;
+
+    private String getFirebaseUid() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof com.google.firebase.auth.FirebaseToken token) {
+            return token.getUid();
+        }
+        throw new com.smartstudy.shared.exception.UnauthorizedException("INVALID_TOKEN", "Authentication is missing or invalid.");
+    }
+
+    @PostMapping("/handshake")
+    public ResponseEntity<HandshakeResponse> handshake(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody HandshakeRequest request) {
+        
+        HandshakeResponse response = authService.handshake(authorization, request);
+        
+        if (response.isNewUser()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } else {
+            return ResponseEntity.ok(response);
+        }
+    }
+
+    @GetMapping("/calendar/status")
+    public ResponseEntity<CalendarStatusResponse> getCalendarStatus() {
+        String uid = getFirebaseUid();
+        return ResponseEntity.ok(planningServiceClient.getCalendarStatus(uid));
+    }
+
+    @PostMapping("/calendar/connect")
+    public ResponseEntity<CalendarConnectResponse> connectCalendar() {
+        String uid = getFirebaseUid();
+        CalendarConnectRequest request = new CalendarConnectRequest("mock_auth_code", "google_calendar", "https://localhost/callback");
+        return ResponseEntity.ok(planningServiceClient.connectCalendar(uid, request));
+    }
+
+    @DeleteMapping("/calendar/disconnect")
+    public ResponseEntity<Void> disconnectCalendar() {
+        String uid = getFirebaseUid();
+        planningServiceClient.disconnectCalendar(uid);
+        return ResponseEntity.noContent().build();
+    }
+}

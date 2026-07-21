@@ -18,23 +18,19 @@ public class FirebaseConfig {
 
     @PostConstruct
     public void initialize() {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials;
-                if (credentialsPath != null && !credentialsPath.isEmpty()) {
-                    credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
-                } else {
-                    credentials = GoogleCredentials.getApplicationDefault();
-                }
-
+        if (FirebaseApp.getApps().isEmpty()) {
+            if (credentialsPath == null || credentialsPath.isBlank()) {
+                return;
+            }
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
                 FirebaseOptions options = FirebaseOptions.builder()
                         .setCredentials(credentials)
                         .build();
-
                 FirebaseApp.initializeApp(options);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to initialize Firebase: " + e.getMessage(), e);
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to initialize Firebase: " + e.getMessage(), e);
         }
     }
 }

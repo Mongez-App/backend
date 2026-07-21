@@ -6,10 +6,9 @@ spring:
       circuitbreaker:
         enabled: true
   datasource:
-    # Resolves local POSTGRES_HOST first, then Railway's PGHOST, then falls back to localhost
-    url: jdbc:postgresql://${POSTGRES_HOST:${PGHOST:localhost}}:${POSTGRES_PORT:${PGPORT:5432}}/${IDENTITY_DB_NAME:${PGDATABASE:identity_db}}
-    username: ${POSTGRES_USER:${PGUSER:smartstudy}}
-    password: ${POSTGRES_PASSWORD:${PGPASSWORD:smartstudy}}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${IDENTITY_DB_NAME:identity_db}
+    username: ${POSTGRES_USER:smartstudy}
+    password: ${POSTGRES_PASSWORD:smartstudy}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -24,10 +23,10 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
-    register-with-eureka: false
-    fetch-registry: false
+    register-with-eureka: ${EUREKA_REGISTER:true}
+    fetch-registry: ${EUREKA_FETCH:true}
   instance:
-    prefer-ip-address: false
+    prefer-ip-address: true
 
 management:
   endpoints:

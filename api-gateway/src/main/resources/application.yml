@@ -15,8 +15,9 @@ spring:
         - id: identity-service
           uri: lb://IDENTITY-SERVICE
           predicates:
-            - Path=/api/v1/auth/**, /api/v1/users/**, /api/v1/preferences/**
+            - Path=/api/v1/auth/**, /api/v1/users/**
           filters:
+            - StripPrefix=2
             - name: CircuitBreaker
               args:
                 name: identityCircuitBreaker
@@ -24,22 +25,13 @@ spring:
         - id: planning-service
           uri: lb://PLANNING-SERVICE
           predicates:
-            - Path=/api/v1/tasks/**, /api/v1/courses/**, /api/v1/materials/**, /api/v1/roadmap/**, /api/v1/sessions/**, /api/v1/calendar/**, /api/v1/home/**
+            - Path=/api/v1/tasks/**, /api/v1/courses/**, /api/v1/roadmap/**, /api/v1/sessions/**, /api/v1/auth/calendar/**, /api/v1/home/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker
               args:
                 name: planningCircuitBreaker
                 fallbackUri: forward:/fallback/planning
-        - id: notification-service
-          uri: lb://NOTIFICATION-SERVICE
-          predicates:
-            - Path=/api/v1/devices/**, /api/v1/push/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: notificationCircuitBreaker
-                fallbackUri: forward:/fallback/notification
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
 

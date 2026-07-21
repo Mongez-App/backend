@@ -1,6 +1,7 @@
 package com.smartstudy.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
@@ -29,6 +30,10 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        if (FirebaseApp.getApps().isEmpty()) {
+            return chain.filter(exchange);
+        }
+
         String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
 
         if (authorization == null || !authorization.startsWith("Bearer ")) {

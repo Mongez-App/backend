@@ -45,6 +45,7 @@ services:
       - SERVER_PORT=${PORT:-8080}
       - SERVER_ADDRESS=0.0.0.0
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
     depends_on:
       eureka:
         condition: service_healthy
@@ -85,27 +86,6 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
       - PLANNING_DB_NAME=${PLANNING_DB_NAME:-planning_db}
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      eureka:
-        condition: service_healthy
-
-  notification-service:
-    build:
-      context: .
-      dockerfile: notification-service/Dockerfile
-    container_name: smartstudy-notification-service
-    environment:
-      - SPRING_PROFILES_ACTIVE=prod
-      - SERVER_PORT=${PORT:-8084}
-      - SERVER_ADDRESS=0.0.0.0
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
-      - NOTIFICATION_DB_NAME=${NOTIFICATION_DB_NAME:-notification_db}
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
     depends_on:
       postgres:

@@ -19,7 +19,6 @@
         <module>api-gateway</module>
         <module>identity-service</module>
         <module>planning-service</module>
-        <module>notification-service</module>
     </modules>
 
     <properties>
@@ -82,7 +81,7 @@
                 <version>${springdoc.version}</version>
             </dependency>
 
-            <!-- Firebase Admin SDK: ID-token verification (identity) + FCM push (notification) -->
+            <!-- Firebase Admin SDK: ID-token verification (identity) -->
             <dependency>
                 <groupId>com.google.firebase</groupId>
                 <artifactId>firebase-admin</artifactId>

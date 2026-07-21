@@ -2,11 +2,17 @@ server:
   port: ${PORT:8080}
   address: 0.0.0.0
 
+logging:
+  level:
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.web.reactive.DispatcherHandler: TRACE
+    reactor.netty.http.server.AccessLog: DEBUG
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info, gateway
   endpoint:
     health:
       show-details: never
@@ -22,9 +28,13 @@ spring:
           lower-case-service-id: true
       routes:
         - id: identity-service
-          uri: lb://identity-service
+          uri: lb://IDENTITY-SERVICE
           predicates:
-            - Path=/api/v1/auth/**, /api/v1/users/**
+            - name: Path
+              args:
+                patterns:
+                  - /api/v1/auth/**
+                  - /api/v1/users/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker
@@ -33,9 +43,17 @@ spring:
                 fallbackUri: forward:/fallback/identity
 
         - id: planning-service
-          uri: lb://planning-service
+          uri: lb://PLANNING-SERVICE
           predicates:
-            - Path=/api/v1/tasks/**, /api/v1/courses/**, /api/v1/roadmap/**, /api/v1/sessions/**, /api/v1/auth/calendar/**, /api/v1/home/**
+            - name: Path
+              args:
+                patterns:
+                  - /api/v1/tasks/**
+                  - /api/v1/courses/**
+                  - /api/v1/roadmap/**
+                  - /api/v1/sessions/**
+                  - /api/v1/auth/calendar/**
+                  - /api/v1/home/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker

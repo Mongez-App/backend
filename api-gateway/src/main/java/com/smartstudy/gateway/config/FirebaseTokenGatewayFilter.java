@@ -38,6 +38,11 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
             throw new ServerErrorException("Firebase App is down", null);
         }
 
+        String path = exchange.getRequest().getURI().getPath();
+        if (shouldSkipFilter(exchange, path)) {
+            return chain.filter(exchange);
+        }
+
         String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
 
         if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -61,6 +66,16 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
             log.warn("Invalid Firebase token for path: {}", exchange.getRequest().getURI().getPath());
             return writeUnauthorizedResponse(exchange, "Invalid or expired Firebase token");
         }
+    }
+
+    private boolean shouldSkipFilter(ServerWebExchange exchange, String path) {
+        if (path.startsWith("/auth")) {
+            return true;
+        }
+        if ("POST".equalsIgnoreCase(exchange.getRequest().getMethod().name()) && "/users".equals(path)) {
+            return true;
+        }
+        return false;
     }
 
     @Override

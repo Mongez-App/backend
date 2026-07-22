@@ -21,8 +21,14 @@ import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +42,7 @@ public class CourseService {
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
+    private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
 
     @Transactional(readOnly = true)
     public List<CourseResponse> getCourses(String userId) {
@@ -132,9 +139,36 @@ public class CourseService {
                 .build();
         Material saved = materialRepository.save(material);
         course.setHasMaterials(true);
-        String uploadUrl = "https://storage.smartstudy.app/upload/" + saved.getId();
+        String uploadUrl = "/api/v1/upload/" + saved.getId();
         return new CreateMaterialResponse(saved.getId(), uploadUrl,
                 new AlertResponse("New material added - your roadmap will refresh once processing completes."));
+    }
+
+    @Transactional
+    public MaterialResponse uploadMaterial(String userId, UUID materialId, MultipartFile file) {
+        Material material = materialRepository.findByIdAndUserId(materialId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_NOT_FOUND"));
+
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
+        }
+
+        if (file.getSize() > material.getFileSizeBytes()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_TOO_LARGE");
+        }
+
+        try {
+            Files.createDirectories(MATERIAL_UPLOAD_DIR);
+            Path uploadPath = MATERIAL_UPLOAD_DIR.resolve(materialId.toString());
+            try (InputStream inputStream = file.getInputStream()) {
+                Files.copy(inputStream, uploadPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
+        }
+
+        material.setStatus("uploaded");
+        return toMaterialResponse(material);
     }
 
     @Transactional

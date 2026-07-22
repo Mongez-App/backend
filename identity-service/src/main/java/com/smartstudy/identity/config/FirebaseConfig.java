@@ -7,34 +7,48 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 public class FirebaseConfig {
+
+    @Value("${firebase.credentials-json:}")
+    private String credentialsJson;
 
     @Value("${firebase.credentials-path:}")
     private String credentialsPath;
 
     @PostConstruct
     public void initialize() {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials;
-                if (credentialsPath != null && !credentialsPath.isEmpty()) {
-                    credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
-                } else {
-                    credentials = GoogleCredentials.getApplicationDefault();
-                }
-
-                FirebaseOptions options = FirebaseOptions.builder()
-                        .setCredentials(credentials)
-                        .build();
-
-                FirebaseApp.initializeApp(options);
+        if (!FirebaseApp.getApps().isEmpty()) {
+            return;
+        }
+        try (InputStream in = resolveCredentialsStream()) {
+            if (in == null) {
+                System.err.println("No Firebase credentials configured — Firebase not initialized.");
+                return;
             }
+            GoogleCredentials credentials = GoogleCredentials.fromStream(in);
+            FirebaseOptions options = FirebaseOptions.builder()
+                    .setCredentials(credentials)
+                    .build();
+            FirebaseApp.initializeApp(options);
         } catch (IOException e) {
             System.err.println("Failed to initialize Firebase: " + e.getMessage());
         }
+    }
+
+    private InputStream resolveCredentialsStream() throws IOException {
+        if (credentialsJson != null && !credentialsJson.isBlank()) {
+            return new ByteArrayInputStream(credentialsJson.getBytes(StandardCharsets.UTF_8));
+        }
+        if (credentialsPath != null && !credentialsPath.isBlank()) {
+            return new FileInputStream(credentialsPath);
+        }
+        return null;
     }
 }

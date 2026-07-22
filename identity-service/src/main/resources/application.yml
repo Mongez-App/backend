@@ -37,4 +37,5 @@ management:
         include: health,info
 
 firebase:
-  credentials-path: ${FIREBASE_CREDENTIALS:/app/credentials/firebase-admin.json}
+  credentials-path: ${FIREBASE_CREDENTIALS:}
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}

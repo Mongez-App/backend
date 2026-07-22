@@ -37,6 +37,8 @@ public class Course {
 
     private String courseCode;
 
+    private String imageUrl;
+
     @Column(nullable = false)
     private Instant startDate;
 

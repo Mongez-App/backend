@@ -20,6 +20,8 @@ management:
 spring:
   application:
     name: api-gateway
+  codec:
+    max-in-memory-size: 25MB
   cloud:
     gateway:
       discovery:
@@ -50,12 +52,17 @@ spring:
                 patterns:
                   - /api/v1/tasks/**
                   - /api/v1/courses/**
+                  - /api/v1/materials/**
+                  - /api/v1/upload/**
                   - /api/v1/roadmap/**
                   - /api/v1/sessions/**
                   - /api/v1/auth/calendar/**
                   - /api/v1/home/**
           filters:
             - StripPrefix=2
+            - name: RequestSize
+              args:
+                maxSize: 25MB
             - name: CircuitBreaker
               args:
                 name: planningCircuitBreaker

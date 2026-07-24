@@ -14,9 +14,10 @@ import org.mapstruct.Named;
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
-    @Mapping(target = "userId", source = "user.id")
-    @Mapping(target = "isNewUser", source = "isNewUser")
-    HandshakeResponse toHandshakeResponse(User user, boolean isNewUser);
+    @Mapping(target = "userId", source = "id")
+    @Mapping(target = "appearance", source = "appearance", qualifiedByName = "appearanceToContract")
+    @Mapping(target = "stats", source = "user", qualifiedByName = "toStats")
+    HandshakeResponse toHandshakeResponse(User user);
 
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "stats", source = "stats")
@@ -36,5 +37,14 @@ public interface UserMapper {
     @Named("languageToContract")
     default String languageToContract(String internalValue) {
         return FieldMappingUtil.languageToContract(internalValue);
+    }
+
+    @Named("toStats")
+    default ProfileStatsResponse toStats(User user) {
+        return new ProfileStatsResponse(
+                user.getTotalStudyHours(),
+                user.getCompletedTasksCount(),
+                user.getCurrentStreakDays()
+        );
     }
 }

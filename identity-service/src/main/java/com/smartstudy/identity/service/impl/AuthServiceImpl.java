@@ -9,6 +9,8 @@ import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.repository.UserRepository;
 import com.smartstudy.identity.service.AuthService;
+import com.smartstudy.identity.util.FieldMappingUtil;
+import com.smartstudy.shared.exception.NotFoundException;
 import com.smartstudy.shared.exception.UnauthorizedException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +28,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public HandshakeResponse handshake(String token, HandshakeRequest request) {
+    public HandshakeResult handshake(String token, HandshakeRequest request) {
         if (token == null || !token.startsWith("Bearer ")) {
             throw new UnauthorizedException("MISSING_TOKEN", "Authorization header is missing or malformed.");
         }
@@ -41,14 +43,21 @@ public class AuthServiceImpl implements AuthService {
 
         String uid = firebaseToken.getUid();
         String email = firebaseToken.getEmail();
-        String name = firebaseToken.getName();
         String avatarUrl = firebaseToken.getPicture();
+
+        // Request fields are validated as @NotBlank
+        String name = request.name();
+        String appearance = FieldMappingUtil.appearanceToInternal(request.appearance());
+        String language = request.language();
 
         // 1. Primary lookup: find existing user by Firebase UID
         var existingById = userRepository.findById(uid);
         if (existingById.isPresent()) {
             log.info("Handshake: existing user found by UID - uid: {}", uid);
-            return userMapper.toHandshakeResponse(existingById.get(), false);
+            User user = existingById.get();
+            updateUserFields(user, name, avatarUrl, appearance, language);
+            userRepository.save(user);
+            return new HandshakeResult(userMapper.toHandshakeResponse(user), false);
         }
 
         // 2. Fallback lookup: find existing user by email
@@ -59,10 +68,9 @@ public class AuthServiceImpl implements AuthService {
             log.info("Handshake: existing user found by email - uid: {}, email: {}", uid, email);
             User user = existingByEmail.get();
             user.setId(uid);
-            user.setName(name);
-            user.setAvatarUrl(avatarUrl);
+            updateUserFields(user, name, avatarUrl, appearance, language);
             userRepository.save(user);
-            return userMapper.toHandshakeResponse(user, false);
+            return new HandshakeResult(userMapper.toHandshakeResponse(user), false);
         }
 
         // 3. No existing user found — create a new one
@@ -72,9 +80,34 @@ public class AuthServiceImpl implements AuthService {
                 .email(email)
                 .name(name)
                 .avatarUrl(avatarUrl)
-                .isGuest(request.isGuest() != null ? request.isGuest() : false)
+                .appearance(appearance)
+                .language(language)
                 .build();
         userRepository.save(newUser);
-        return userMapper.toHandshakeResponse(newUser, true);
+        return new HandshakeResult(userMapper.toHandshakeResponse(newUser), true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HandshakeResponse getMe(String uid) {
+        User user = userRepository.findById(uid)
+                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND",
+                        "The authenticated user does not exist in the application database."));
+        return userMapper.toHandshakeResponse(user);
+    }
+
+    private void updateUserFields(User user, String name, String avatarUrl, String appearance, String language) {
+        if (name != null) {
+            user.setName(name);
+        }
+        if (avatarUrl != null) {
+            user.setAvatarUrl(avatarUrl);
+        }
+        if (appearance != null) {
+            user.setAppearance(appearance);
+        }
+        if (language != null) {
+            user.setLanguage(language);
+        }
     }
 }

@@ -48,6 +48,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=api-gateway
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
     depends_on:
       eureka:
@@ -70,6 +71,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
       - IDENTITY_DB_NAME=${IDENTITY_DB_NAME:-identity_db}
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=identity-service
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
     depends_on:
       postgres:
@@ -92,6 +94,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
       - PLANNING_DB_NAME=${PLANNING_DB_NAME:-planning_db}
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=planning-service
     depends_on:
       postgres:
         condition: service_healthy

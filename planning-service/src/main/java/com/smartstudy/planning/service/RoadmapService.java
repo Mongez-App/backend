@@ -75,7 +75,7 @@ public class RoadmapService {
                 .map(task -> {
                     Course course = courses.get(task.getCourseId());
                     String courseName = course != null ? course.getName() : "Unknown Course";
-                    return new RoadmapResponse.RoadmapTaskResponse(task.getId(), courseName, task.getTitle(),
+                    return new RoadmapResponse.RoadmapTaskResponse(task.getId(), task.getCourseId(), courseName, task.getTitle(),
                             task.getDurationMinutes(), task.isCompleted());
                 })
                 .toList();

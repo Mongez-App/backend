@@ -31,6 +31,7 @@ public record RoadmapResponse(
 
     public record RoadmapTaskResponse(
             @JsonProperty("task_id") UUID taskId,
+            @JsonProperty("course_id") UUID courseId,
             @JsonProperty("course_name") String courseName,
             @JsonProperty("title") String title,
             @JsonProperty("duration_minutes") Integer durationMinutes,

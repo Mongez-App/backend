@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record RescheduleRoadmapRequest(
-        @NotEmpty @JsonProperty("block_ids") List<UUID> blockIds,
+        @NotEmpty @JsonProperty("task_ids") List<UUID> taskIds,
         @JsonProperty("reason") String reason
 ) {
 }

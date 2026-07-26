@@ -19,6 +19,13 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     Optional<Task> findByIdAndUserId(UUID id, String userId);
 
+    List<Task> findByIdInAndUserId(List<UUID> ids, String userId);
+
+    List<Task> findByUserIdAndScheduledDateBetweenOrderByScheduledDateAscCreatedAtAsc(
+            String userId, LocalDate startDate, LocalDate endDate);
+
+    void deleteByCourseIdAndUserId(UUID courseId, String userId);
+
     long countByUserIdAndCourseId(String userId, UUID courseId);
 
     long countByUserIdAndCourseIdAndCompletedTrue(String userId, UUID courseId);

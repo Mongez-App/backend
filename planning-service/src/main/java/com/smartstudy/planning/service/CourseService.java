@@ -10,10 +10,11 @@ import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Material;
-import com.smartstudy.planning.model.StudyBlock;
+import com.smartstudy.planning.model.Task;
+
+import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
-import com.smartstudy.planning.repository.StudyBlockRepository;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +41,6 @@ public class CourseService {
     private static final Logger log = LoggerFactory.getLogger(CourseService.class);
     private final CourseRepository courseRepository;
     private final MaterialRepository materialRepository;
-    private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
     private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
 
@@ -73,7 +73,7 @@ public class CourseService {
                 .hidden(false)
                 .build();
         Course saved = courseRepository.save(course);
-        createInitialStudyBlock(userId, saved);
+        createInitialTask(userId, saved);
         return toResponse(userId, saved, false, "Your roadmap has been generated for " + saved.getName() + ".");
     }
 
@@ -109,9 +109,9 @@ public class CourseService {
     public StatusResponse deleteCourse(String userId, UUID courseId) {
         log.info("Deleting course {} for userId: {}", courseId, userId);
         Course course = getOwnedCourse(userId, courseId);
-        studyBlockRepository.deleteByCourseIdAndUserId(courseId, userId);
+        taskRepository.deleteByCourseIdAndUserId(courseId, userId);
         courseRepository.delete(course);
-        return new StatusResponse("success", new AlertResponse(course.getName() + " and its roadmap blocks have been removed."));
+        return new StatusResponse("success", new AlertResponse(course.getName() + " and its tasks have been removed."));
     }
 
     @Transactional(readOnly = true)
@@ -177,7 +177,7 @@ public class CourseService {
         getOwnedCourse(userId, courseId);
         materialRepository.deleteByIdAndCourseIdAndUserId(materialId, courseId, userId);
         return new StatusResponse("success",
-                new AlertResponse("Study blocks linked to this material were removed from your roadmap."));
+                new AlertResponse("Tasks linked to this material were removed from your roadmap."));
     }
 
     public Course getOwnedCourse(String userId, UUID courseId) {
@@ -214,13 +214,15 @@ public class CourseService {
         return Math.round((completed * 10000.0) / total) / 100.0;
     }
 
-    private void createInitialStudyBlock(String userId, Course course) {
-        studyBlockRepository.save(StudyBlock.builder()
+    private void createInitialTask(String userId, Course course) {
+        taskRepository.save(Task.builder()
                 .userId(userId)
                 .courseId(course.getId())
-                .topic(course.getName() + " overview")
+                .title(course.getName() + " overview")
                 .scheduledDate(course.getStartDate().atZone(ZoneOffset.UTC).toLocalDate())
                 .durationMinutes(60)
+                .priority(Priority.MEDIUM)
+
                 .completed(false)
                 .build());
     }

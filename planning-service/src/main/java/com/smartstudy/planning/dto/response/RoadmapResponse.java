@@ -25,14 +25,14 @@ public record RoadmapResponse(
     public record DayResponse(
             @JsonProperty("date") LocalDate date,
             @JsonProperty("day_name") String dayName,
-            @JsonProperty("study_blocks") List<StudyBlockResponse> studyBlocks
+            @JsonProperty("tasks") List<RoadmapTaskResponse> tasks
     ) {
     }
 
-    public record StudyBlockResponse(
-            @JsonProperty("block_id") UUID blockId,
+    public record RoadmapTaskResponse(
+            @JsonProperty("task_id") UUID taskId,
             @JsonProperty("course_name") String courseName,
-            @JsonProperty("topic") String topic,
+            @JsonProperty("title") String title,
             @JsonProperty("duration_minutes") Integer durationMinutes,
             @JsonProperty("is_completed") boolean completed
     ) {

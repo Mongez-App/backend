@@ -4,9 +4,9 @@ import com.smartstudy.planning.dto.request.RescheduleRoadmapRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.RoadmapResponse;
 import com.smartstudy.planning.model.Course;
-import com.smartstudy.planning.model.StudyBlock;
+import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
-import com.smartstudy.planning.repository.StudyBlockRepository;
+import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 public class RoadmapService {
 
     private static final Logger log = LoggerFactory.getLogger(RoadmapService.class);
-    private final StudyBlockRepository studyBlockRepository;
+    private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
 
     @Transactional(readOnly = true)
@@ -40,25 +40,25 @@ public class RoadmapService {
 
     @Transactional
     public RoadmapResponse reschedule(String userId, RescheduleRoadmapRequest request) {
-        log.info("Rescheduling blocks {} for userId: {}", request.blockIds(), userId);
-        List<StudyBlock> blocks = studyBlockRepository.findByIdInAndUserId(request.blockIds(), userId);
+        log.info("Rescheduling tasks {} for userId: {}", request.taskIds(), userId);
+        List<Task> tasks = taskRepository.findByIdInAndUserId(request.taskIds(), userId);
         LocalDate targetDate = LocalDate.now().plusDays(1);
-        blocks.forEach(block -> block.setScheduledDate(targetDate));
+        tasks.forEach(task -> task.setScheduledDate(targetDate));
         LocalDate startDate = weekStart(targetDate);
-        String message = blocks.size() + " study block" + (blocks.size() == 1 ? " was" : "s were")
+        String message = tasks.size() + " task" + (tasks.size() == 1 ? " was" : "s were")
                 + " moved to " + targetDate.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + ".";
         return buildWeeklyResponse(userId, startDate, new AlertResponse(message));
     }
 
     private RoadmapResponse buildWeeklyResponse(String userId, LocalDate startDate, AlertResponse alert) {
         LocalDate endDate = startDate.plusDays(6);
-        List<StudyBlock> blocks = studyBlockRepository
+        List<Task> tasks = taskRepository
                 .findByUserIdAndScheduledDateBetweenOrderByScheduledDateAscCreatedAtAsc(userId, startDate, endDate);
         Map<UUID, Course> courses = courseRepository.findByUserIdOrderByCreatedAtAsc(userId)
                 .stream()
                 .collect(Collectors.toMap(Course::getId, Function.identity()));
-        Map<LocalDate, List<StudyBlock>> byDay = blocks.stream()
-                .collect(Collectors.groupingBy(StudyBlock::getScheduledDate));
+        Map<LocalDate, List<Task>> byDay = tasks.stream()
+                .collect(Collectors.groupingBy(Task::getScheduledDate));
 
         List<RoadmapResponse.DayResponse> days = byDay.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -69,18 +69,18 @@ public class RoadmapService {
         return new RoadmapResponse(startDate, List.of(week), alert);
     }
 
-    private RoadmapResponse.DayResponse toDayResponse(LocalDate date, List<StudyBlock> blocks, Map<UUID, Course> courses) {
-        List<RoadmapResponse.StudyBlockResponse> blockResponses = blocks.stream()
-                .sorted(Comparator.comparing(StudyBlock::getCreatedAt))
-                .map(block -> {
-                    Course course = courses.get(block.getCourseId());
+    private RoadmapResponse.DayResponse toDayResponse(LocalDate date, List<Task> tasks, Map<UUID, Course> courses) {
+        List<RoadmapResponse.RoadmapTaskResponse> taskResponses = tasks.stream()
+                .sorted(Comparator.comparing(Task::getCreatedAt))
+                .map(task -> {
+                    Course course = courses.get(task.getCourseId());
                     String courseName = course != null ? course.getName() : "Unknown Course";
-                    return new RoadmapResponse.StudyBlockResponse(block.getId(), courseName, block.getTopic(),
-                            block.getDurationMinutes(), block.isCompleted());
+                    return new RoadmapResponse.RoadmapTaskResponse(task.getId(), courseName, task.getTitle(),
+                            task.getDurationMinutes(), task.isCompleted());
                 })
                 .toList();
         return new RoadmapResponse.DayResponse(date,
-                date.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH), blockResponses);
+                date.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH), taskResponses);
     }
 
     private LocalDate weekStart(LocalDate date) {

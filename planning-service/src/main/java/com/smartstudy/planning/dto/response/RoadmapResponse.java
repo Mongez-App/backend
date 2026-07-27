@@ -31,10 +31,12 @@ public record RoadmapResponse(
 
     public record StudyBlockResponse(
             @JsonProperty("block_id") UUID blockId,
+            @JsonProperty("course_id") UUID courseId,
             @JsonProperty("course_name") String courseName,
             @JsonProperty("topic") String topic,
             @JsonProperty("duration_minutes") Integer durationMinutes,
-            @JsonProperty("is_completed") boolean completed
+            @JsonProperty("is_completed") boolean completed,
+            @JsonProperty("events") List<EventResponse> events
     ) {
     }
 }

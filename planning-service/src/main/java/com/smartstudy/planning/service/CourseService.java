@@ -10,6 +10,7 @@ import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
@@ -25,10 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -42,7 +40,7 @@ public class CourseService {
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
-    private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public List<CourseResponse> getCourses(String userId) {
@@ -135,7 +133,7 @@ public class CourseService {
                 .contentType(request.contentType())
                 .fileSizeBytes(request.fileSizeBytes())
                 .pageCount(request.pageCount())
-                .status("pending")
+                .status(MaterialStatus.PENDING)
                 .build();
         Material saved = materialRepository.save(material);
         course.setHasMaterials(true);
@@ -149,6 +147,11 @@ public class CourseService {
         Material material = materialRepository.findByIdAndUserId(materialId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_NOT_FOUND"));
 
+        // Only allow upload when PENDING or FAILED (retry)
+        if (material.getStatus() != MaterialStatus.PENDING && material.getStatus() != MaterialStatus.FAILED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "MATERIAL_ALREADY_UPLOADED");
+        }
+
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
         }
@@ -158,16 +161,16 @@ public class CourseService {
         }
 
         try {
-            Files.createDirectories(MATERIAL_UPLOAD_DIR);
-            Path uploadPath = MATERIAL_UPLOAD_DIR.resolve(materialId.toString());
-            try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, uploadPath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            String filePath = fileStorageService.save(
+                    userId, material.getCourseId(), materialId, file.getInputStream());
+            material.setFilePath(filePath);
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
         }
 
-        material.setStatus("uploaded");
+        material.setStatus(MaterialStatus.PROCESSING);
+        material.setUploadedAt(Instant.now());
+        material.setErrorMessage(null);
         return toMaterialResponse(material);
     }
 
@@ -175,6 +178,8 @@ public class CourseService {
     public StatusResponse deleteMaterial(String userId, UUID courseId, UUID materialId) {
         log.info("Deleting material {} from course {} | userId: {}", materialId, courseId, userId);
         getOwnedCourse(userId, courseId);
+        // Delete file from disk
+        fileStorageService.delete(userId, courseId, materialId);
         materialRepository.deleteByIdAndCourseIdAndUserId(materialId, courseId, userId);
         return new StatusResponse("success",
                 new AlertResponse("Study blocks linked to this material were removed from your roadmap."));
@@ -201,8 +206,15 @@ public class CourseService {
 
     private MaterialResponse toMaterialResponse(Material material) {
         double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
-        return new MaterialResponse(material.getId(), material.getName(), material.getPageCount(), sizeMb,
-                material.getStatus(), material.getUploadedAt());
+        return new MaterialResponse(
+                material.getId(),
+                material.getName(),
+                material.getPageCount(),
+                sizeMb,
+                material.getStatus().name().toLowerCase(),
+                material.getUploadedAt(),
+                material.getProcessedAt(),
+                material.getErrorMessage());
     }
 
     private double completionPercentage(String userId, UUID courseId) {

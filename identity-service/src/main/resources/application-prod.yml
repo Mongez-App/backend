@@ -1,7 +1,12 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:postgres-yyy6.railway.internal}:${POSTGRES_PORT:5432}/${IDENTITY_DB_NAME:identity_db}
+    username: ${POSTGRES_USER:smartstudy}
+    password: ${POSTGRES_PASSWORD:smartstudy}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
 
 eureka:
   client:

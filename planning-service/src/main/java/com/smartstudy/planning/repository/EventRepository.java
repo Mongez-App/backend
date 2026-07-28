@@ -15,5 +15,5 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
             String userId, UUID courseId, Instant startDate);
 
     List<Event> findByUserIdAndCourseIdAndTaskIdIsNotNull(String userId, UUID courseId);
-    List<Event> findByUserIdAndEventDateBetween(String userId, Instant startDate, Instant endDate);
+    List<Event> findByUserIdAndStartDateBetween(String userId, Instant startDate, Instant endDate);
 }

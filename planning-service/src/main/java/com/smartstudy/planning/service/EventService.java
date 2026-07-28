@@ -1,10 +1,13 @@
 package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.dto.request.CreateEventRequest;
+import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.EventResponse;
 import com.smartstudy.planning.dto.response.EventsResponse;
 import com.smartstudy.planning.exception.ValidationException;
+import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Event;
+import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +20,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +28,7 @@ public class EventService {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
     private final EventRepository eventRepository;
+    private final CourseRepository courseRepository;
 
     @Transactional
     public EventsResponse createEvents(String userId, List<CreateEventRequest> requests) {
@@ -69,6 +74,31 @@ public class EventService {
         );
     }
 
+    @Transactional
+    public AlertResponse createEvent(String userId, UUID courseId, CreateEventRequest request) {
+        log.info("Creating event for userId: {} | courseId: {}", userId, courseId);
+        validateEventRequest(request);
+        Instant startInstant = parseInstant(request.startDate());
+        Instant endInstant = request.endDate() != null && !request.endDate().isBlank()
+                ? parseInstant(request.endDate())
+                : null;
+
+        if (endInstant != null && endInstant.isBefore(startInstant)) {
+            throw new ValidationException("Event validation failed",
+                    List.of("endDate must be equal to or after startDate."));
+        }
+
+        Event event = Event.builder()
+                .userId(userId)
+                .title(request.title())
+                .startDate(startInstant)
+                .endDate(endInstant)
+                .courseId(courseId)
+                .build();
+        Event saved = eventRepository.save(event);
+        return new AlertResponse("Event created successfully");
+    }
+
     private void validateEventRequest(CreateEventRequest request) {
         List<String> errors = new ArrayList<>();
         if (request.title() == null || request.title().isBlank()) {
@@ -99,11 +129,17 @@ public class EventService {
     }
 
     private EventResponse toEventResponse(Event event) {
+        String courseName = null;
+        if (event.getCourseId() != null) {
+            courseName = courseRepository.findById(event.getCourseId()).map(Course::getName).orElse(null);
+        }
         return new EventResponse(
                 event.getId().toString(),
                 event.getTitle(),
                 event.getStartDate().toString(),
-                event.getEndDate() != null ? event.getEndDate().toString() : null
+                event.getEndDate() != null ? event.getEndDate().toString() : null,
+                event.getCourseId(),
+                courseName
         );
     }
 }

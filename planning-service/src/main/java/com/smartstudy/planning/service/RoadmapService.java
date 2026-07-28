@@ -63,7 +63,7 @@ public class RoadmapService {
                 .stream()
                 .collect(Collectors.toMap(Course::getId, Function.identity()));
 
-        List<Event> events = eventRepository.findByUserIdAndEventDateBetween(
+        List<Event> events = eventRepository.findByUserIdAndStartDateBetween(
                 userId, 
                 startDate.atStartOfDay().toInstant(ZoneOffset.UTC), 
                 endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
@@ -90,8 +90,9 @@ public class RoadmapService {
                     
                     List<EventResponse> blockEvents = allEvents.stream()
                             .filter(e -> e.getCourseId().equals(block.getCourseId()))
-                            .filter(e -> e.getEventDate().atZone(ZoneOffset.UTC).toLocalDate().equals(date))
-                            .map(e -> new EventResponse(e.getId(), e.getCourseId(), courseName, e.getTitle(), e.getEventType(), e.getEventDate()))
+                            .filter(e -> e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate().equals(date))
+                            .map(e -> new EventResponse(e.getId().toString(), e.getTitle(), e.getStartDate().toString(),
+                                    e.getEndDate() != null ? e.getEndDate().toString() : null, e.getCourseId(), courseName))
                             .toList();
 
                     return new RoadmapResponse.StudyBlockResponse(block.getId(), block.getCourseId(), courseName, block.getTopic(),

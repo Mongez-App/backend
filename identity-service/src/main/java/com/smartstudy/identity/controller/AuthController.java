@@ -1,9 +1,9 @@
 package com.smartstudy.identity.controller;
 
-import com.smartstudy.identity.client.PlanningServiceClient;
 import com.smartstudy.identity.dto.request.HandshakeRequest;
 import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.service.AuthService;
+import com.smartstudy.identity.service.AuthService.HandshakeResult;
 import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -38,7 +39,7 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody HandshakeRequest request) {
         log.info("Incoming request: POST /auth/handshake");
-        AuthService.HandshakeResult result = authService.handshake(authorization, request);
+        HandshakeResult result = authService.handshake(authorization, request);
         if (result.isNewUser()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(result.response());
         }

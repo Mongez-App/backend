@@ -4,6 +4,7 @@ import com.smartstudy.planning.dto.request.CreateTaskRequest;
 import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.UpdateTaskRequest;
 import com.smartstudy.planning.model.Task;
+import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.planning.dto.TaskMapper;
 import com.smartstudy.shared.logging.LoggerFactory;
@@ -24,6 +25,7 @@ public class TaskService {
 
     private static final Logger log = LoggerFactory.getLogger(TaskService.class);
     private final TaskRepository taskRepository;
+    private final CourseRepository courseRepository;
     private final TaskMapper taskMapper;
 
     @Transactional(readOnly = true)
@@ -31,6 +33,21 @@ public class TaskService {
         log.info("Fetching tasks for userId: {} | date: {}", userId, date);
         return taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
                 .stream()
+                .map(taskMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskResponse> getTasksByCourse(String userId, UUID courseId, LocalDate date) {
+        log.info("Fetching tasks for userId: {} | courseId: {} | date: {}", userId, courseId, date);
+        courseRepository.findByIdAndUserId(courseId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+
+        List<Task> tasks = date != null
+                ? taskRepository.findByUserIdAndCourseIdAndScheduledDateOrderByCreatedAtAsc(userId, courseId, date)
+                : taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId);
+
+        return tasks.stream()
                 .map(taskMapper::toResponse)
                 .toList();
     }

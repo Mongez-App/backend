@@ -5,8 +5,12 @@ import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.RoadmapResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.StudyBlock;
+import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.repository.CourseRepository;
+import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
+import com.smartstudy.planning.dto.response.EventResponse;
+import java.time.ZoneOffset;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -31,6 +35,7 @@ public class RoadmapService {
     private static final Logger log = LoggerFactory.getLogger(RoadmapService.class);
     private final StudyBlockRepository studyBlockRepository;
     private final CourseRepository courseRepository;
+    private final EventRepository eventRepository;
 
     @Transactional(readOnly = true)
     public RoadmapResponse getWeeklyRoadmap(String userId, LocalDate startDate) {
@@ -57,26 +62,40 @@ public class RoadmapService {
         Map<UUID, Course> courses = courseRepository.findByUserIdOrderByCreatedAtAsc(userId)
                 .stream()
                 .collect(Collectors.toMap(Course::getId, Function.identity()));
+
+        List<Event> events = eventRepository.findByUserIdAndEventDateBetween(
+                userId, 
+                startDate.atStartOfDay().toInstant(ZoneOffset.UTC), 
+                endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+        );
+
         Map<LocalDate, List<StudyBlock>> byDay = blocks.stream()
                 .collect(Collectors.groupingBy(StudyBlock::getScheduledDate));
 
         List<RoadmapResponse.DayResponse> days = byDay.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .map(entry -> toDayResponse(entry.getKey(), entry.getValue(), courses))
+                .map(entry -> toDayResponse(entry.getKey(), entry.getValue(), courses, events))
                 .toList();
 
         RoadmapResponse.WeekResponse week = new RoadmapResponse.WeekResponse(1, startDate, endDate, days);
         return new RoadmapResponse(startDate, List.of(week), alert);
     }
 
-    private RoadmapResponse.DayResponse toDayResponse(LocalDate date, List<StudyBlock> blocks, Map<UUID, Course> courses) {
+    private RoadmapResponse.DayResponse toDayResponse(LocalDate date, List<StudyBlock> blocks, Map<UUID, Course> courses, List<Event> allEvents) {
         List<RoadmapResponse.StudyBlockResponse> blockResponses = blocks.stream()
                 .sorted(Comparator.comparing(StudyBlock::getCreatedAt))
                 .map(block -> {
                     Course course = courses.get(block.getCourseId());
                     String courseName = course != null ? course.getName() : "Unknown Course";
-                    return new RoadmapResponse.StudyBlockResponse(block.getId(), courseName, block.getTopic(),
-                            block.getDurationMinutes(), block.isCompleted());
+                    
+                    List<EventResponse> blockEvents = allEvents.stream()
+                            .filter(e -> e.getCourseId().equals(block.getCourseId()))
+                            .filter(e -> e.getEventDate().atZone(ZoneOffset.UTC).toLocalDate().equals(date))
+                            .map(e -> new EventResponse(e.getId(), e.getCourseId(), courseName, e.getTitle(), e.getEventType(), e.getEventDate()))
+                            .toList();
+
+                    return new RoadmapResponse.StudyBlockResponse(block.getId(), block.getCourseId(), courseName, block.getTopic(),
+                            block.getDurationMinutes(), block.isCompleted(), blockEvents);
                 })
                 .toList();
         return new RoadmapResponse.DayResponse(date,

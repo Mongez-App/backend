@@ -8,6 +8,7 @@ import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,7 +38,17 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody HandshakeRequest request) {
         log.info("Incoming request: POST /auth/handshake");
-        HandshakeResponse response = authService.handshake(authorization, request);
-        return ResponseEntity.ok(response);
+        AuthService.HandshakeResult result = authService.handshake(authorization, request);
+        if (result.isNewUser()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(result.response());
+        }
+        return ResponseEntity.ok(result.response());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<HandshakeResponse> getMe() {
+        log.info("Incoming request: GET /auth/me");
+        String uid = getFirebaseUid();
+        return ResponseEntity.ok(authService.getMe(uid));
     }
 }

@@ -1,9 +1,15 @@
 package com.smartstudy.identity.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
 public record HandshakeRequest(
-        @NotNull(message = "is_guest field is required.")
-        @JsonProperty("is_guest") Boolean isGuest
+        @NotBlank(message = "name is required.")
+        @JsonProperty("name") String name,
+
+        @NotBlank(message = "appearance is required.")
+        @JsonProperty("appearance") String appearance,
+
+        @NotBlank(message = "language is required.")
+        @JsonProperty("language") String language
 ) {}

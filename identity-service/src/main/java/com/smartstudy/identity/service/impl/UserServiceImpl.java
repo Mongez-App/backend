@@ -85,11 +85,6 @@ public class UserServiceImpl implements UserService {
             hasUpdates = true;
         }
 
-        if (request.calendarSyncConnected() != null) {
-            user.setCalendarSyncConnected(request.calendarSyncConnected());
-            hasUpdates = true;
-        }
-
         if (!hasUpdates) {
             throw new BadRequestException("INVALID_REQUEST", "Request body must contain at least one field to update.");
         }
@@ -124,32 +119,7 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(firebaseUid)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "User not found."));
 
-        try {
-            planningServiceClient.disconnectCalendar(firebaseUid);
-        } catch (feign.FeignException e) {
-            throw new com.smartstudy.shared.exception.BadRequestException("SERVICE_UNAVAILABLE", "Calendar service is currently unavailable.");
-        }
-
-        try {
-            com.google.firebase.auth.FirebaseAuth auth = com.google.firebase.auth.FirebaseAuth.getInstance();
-            boolean userExists = false;
-            try {
-                auth.getUser(firebaseUid);
-                userExists = true;
-            } catch (com.google.firebase.auth.FirebaseAuthException e) {
-                if (!"user-not-found".equals(e.getErrorCode()) && e.getAuthErrorCode() != com.google.firebase.auth.AuthErrorCode.USER_NOT_FOUND) {
-                    throw e;
-                }
-            }
-            
-            if (userExists) {
-                auth.deleteUser(firebaseUid);
-            }
-        } catch (com.google.firebase.auth.FirebaseAuthException e) {
-            throw new com.smartstudy.shared.exception.BadRequestException("FIREBASE_ERROR", "Failed to delete Firebase account.");
-        }
-
-        userPreferenceRepository.deleteById(firebaseUid);
+userPreferenceRepository.deleteById(firebaseUid);
         userPreferenceRepository.flush();
         userRepository.delete(user);
         userRepository.flush();

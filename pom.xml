@@ -31,9 +31,22 @@
         <lombok.mapstruct.binding.version>0.2.0</lombok.mapstruct.binding.version>
         <springdoc.version>2.6.0</springdoc.version>
         <firebase-admin.version>9.3.0</firebase-admin.version>
+        <spring-ai.version>1.1.8</spring-ai.version>
+        <pdfbox.version>3.0.3</pdfbox.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>spring-milestones</id>
+            <url>https://repo.spring.io/milestone</url>
+        </repository>
+        <repository>
+            <id>spring-snapshots</id>
+            <url>https://repo.spring.io/snapshot</url>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
@@ -41,6 +54,14 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -81,11 +102,16 @@
                 <version>${springdoc.version}</version>
             </dependency>
 
-            <!-- Firebase Admin SDK: ID-token verification (identity) -->
             <dependency>
                 <groupId>com.google.firebase</groupId>
                 <artifactId>firebase-admin</artifactId>
                 <version>${firebase-admin.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
             </dependency>
 
             <!-- Spring Cloud BOM -->

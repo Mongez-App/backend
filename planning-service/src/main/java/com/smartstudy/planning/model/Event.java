@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,31 +17,41 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "calendar_integrations")
+@Table(name = "events")
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CalendarIntegration {
+public class Event {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "user_id", length = 128, nullable = false, unique = true)
+    @Column(nullable = false)
     private String userId;
 
-    @Column(length = 50, nullable = false)
-    @Builder.Default
-    private String provider = "google_calendar";
+    @Column(nullable = false)
+    private String title;
 
     @Column(nullable = false)
-    @Builder.Default
-    private boolean connected = false;
+    private Instant startDate;
 
-    @Column(name = "connected_at")
-    private Instant connectedAt;
+    @Column(nullable = true)
+    private Instant endDate;
 
-    @Column(name = "disconnected_at")
-    private Instant disconnectedAt;
+    @Column(name = "course_id")
+    private UUID courseId;
+
+    @Column(name = "task_id")
+    private UUID taskId;
+
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @PrePersist
+    void onCreate() {
+        createdAt = Instant.now();
+    }
 }

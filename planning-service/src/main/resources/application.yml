@@ -5,13 +5,15 @@ spring:
     multipart:
       max-file-size: 25MB
       max-request-size: 25MB
-  datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${PLANNING_DB_NAME:planning_db}
-    username: ${POSTGRES_USER:smartstudy}
-    password: ${POSTGRES_PASSWORD:smartstudy}
+  ai:
+    google:
+      genai:
+        api-key: ${SPRING_AI_GOOGLE_GEMINI_API_KEY:}
+        chat:
+          options:
+            model: gemini-3.1-flash-lite
+            temperature: 0.2
   jpa:
-    hibernate:
-      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     open-in-view: false
 
 server:
@@ -22,17 +24,15 @@ server:
 
 eureka:
   client:
-    service-url:
-      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
-  instance:
-    prefer-ip-address: false
-    hostname: ${EUREKA_INSTANCE_HOSTNAME:planning-service.railway.internal}
-
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+
+smartstudy:
+  agent:
+    min-split-minutes: 20

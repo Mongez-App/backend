@@ -40,17 +40,13 @@ public class User {
     @Builder.Default
     private boolean isGuest = false;
 
-    @Column(length = 20, nullable = false)
+@Column(length = 20, nullable = false)
     @Builder.Default
     private String appearance = "SYSTEM";
 
-    @Column(length = 2, nullable = false)
+    @Column(length = 20, nullable = false)
     @Builder.Default
     private String language = "en";
-
-    @Column(name = "calendar_sync_connected", nullable = false)
-    @Builder.Default
-    private boolean calendarSyncConnected = false;
 
     @Column(name = "total_study_hours", nullable = false)
     @Builder.Default

@@ -60,4 +60,22 @@ public class Task {
     void onCreate() {
         createdAt = Instant.now();
     }
+
+    @Column(name = "material_id")
+    private UUID materialId;
+
+    @Column(name = "sequence_order")
+    private Integer sequenceOrder;
+
+    @Column(name = "split_part")
+    private Integer splitPart;
+
+    @Column(name = "total_parts")
+    private Integer totalParts;
+
+    @Column(nullable = false)
+    private boolean locked;
+
+    @Column(nullable = false)
+    private boolean missed;
 }

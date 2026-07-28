@@ -1,0 +1,6 @@
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+  server:
+    enable-self-preservation: ${EUREKA_ENABLE_SELF_PRESERVATION:false}

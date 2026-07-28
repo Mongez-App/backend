@@ -21,4 +21,17 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     long countByUserIdAndScheduledDateAndCompletedTrue(String userId, LocalDate scheduledDate);
 
     long countByUserIdAndScheduledDate(String userId, LocalDate scheduledDate);
+
+    List<Task> findByUserIdAndCourseIdAndScheduledDateAndCompletedFalseAndMissedFalse(
+            String userId, UUID courseId, LocalDate scheduledDate);
+
+    List<Task> findByUserIdAndCourseIdAndScheduledDateBeforeAndCompletedFalseAndMissedFalse(
+            String userId, UUID courseId, LocalDate scheduledDate);
+
+    List<Task> findByUserIdAndCourseIdAndScheduledDateAfterAndCompletedFalseAndMissedFalse(
+            String userId, UUID courseId, LocalDate scheduledDate);
+
+    List<Task> findByUserIdAndCourseIdAndCompletedFalse(String userId, UUID courseId);
+
+    boolean existsByCourseIdAndUserIdAndMaterialIdIsNotNull(UUID courseId, String userId);
 }

@@ -87,6 +87,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - POSTGRES_HOST=postgres
+      - SPRING_AI_GOOGLE_GEMINI_API_KEY=${SPRING_AI_GOOGLE_GEMINI_API_KEY:-your_key}
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}

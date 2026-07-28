@@ -48,6 +48,9 @@ public class StudyBlock {
     @Column(nullable = false)
     private boolean completed;
 
+    @Column(name = "task_id")
+    private UUID taskId;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 

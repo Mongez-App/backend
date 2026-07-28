@@ -9,6 +9,7 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record CourseResponse(
         @JsonProperty("id") UUID id,
+        @JsonProperty("user_id") String userId,
         @JsonProperty("name") String name,
         @JsonProperty("course_code") String courseCode,
         @JsonProperty("image_url") String imageUrl,

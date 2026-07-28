@@ -1,0 +1,13 @@
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    org.springframework.web.reactive.DispatcherHandler: INFO
+    reactor.netty.http.server.AccessLog: INFO
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:api-gateway.railway.internal}

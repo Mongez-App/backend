@@ -1,11 +1,9 @@
 package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
-import com.smartstudy.planning.dto.request.CreateMaterialRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.CourseResponse;
-import com.smartstudy.planning.dto.response.CreateMaterialResponse;
 import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.model.Course;
@@ -19,6 +17,7 @@ import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,6 +41,7 @@ public class CourseService {
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
+    private final StudyPlannerAgent studyPlannerAgent;
     private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
 
     @Transactional(readOnly = true)
@@ -125,41 +125,27 @@ public class CourseService {
     }
 
     @Transactional
-    public CreateMaterialResponse createMaterial(String userId, UUID courseId, CreateMaterialRequest request) {
-        log.info("Creating material for course {} | userId: {} | fileName: {}", courseId, userId, request.fileName());
+    public MaterialResponse createMaterial(String userId, UUID courseId,
+                                              MultipartFile file, int dailyStudyMinutes, String preferredDays) {
+        log.info("Creating material for course {} | userId: {} | fileName: {}", courseId, userId, file.getName());
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
+        }
         Course course = getOwnedCourse(userId, courseId);
         Material material = Material.builder()
                 .courseId(courseId)
                 .userId(userId)
-                .name(request.fileName())
-                .contentType(request.contentType())
-                .fileSizeBytes(request.fileSizeBytes())
-                .pageCount(request.pageCount())
+                .name(file.getName())
+                .contentType(file.getContentType())
+                .fileSizeBytes(file.getSize())
                 .status("pending")
                 .build();
         Material saved = materialRepository.save(material);
         course.setHasMaterials(true);
-        String uploadUrl = "/api/v1/upload/" + saved.getId();
-        return new CreateMaterialResponse(saved.getId(), uploadUrl,
-                new AlertResponse("New material added - your roadmap will refresh once processing completes."));
-    }
-
-    @Transactional
-    public MaterialResponse uploadMaterial(String userId, UUID materialId, MultipartFile file) {
-        Material material = materialRepository.findByIdAndUserId(materialId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_NOT_FOUND"));
-
-        if (file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
-        }
-
-        if (file.getSize() > material.getFileSizeBytes()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_TOO_LARGE");
-        }
 
         try {
             Files.createDirectories(MATERIAL_UPLOAD_DIR);
-            Path uploadPath = MATERIAL_UPLOAD_DIR.resolve(materialId.toString());
+            Path uploadPath = MATERIAL_UPLOAD_DIR.resolve(saved.getId().toString());
             try (InputStream inputStream = file.getInputStream()) {
                 Files.copy(inputStream, uploadPath, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -167,8 +153,22 @@ public class CourseService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
         }
 
-        material.setStatus("uploaded");
-        return toMaterialResponse(material);
+        saved.setStatus("uploaded");
+        materialRepository.save(saved);
+        triggerAgentForMaterial(userId, courseId, saved.getId(), dailyStudyMinutes, preferredDays);
+        return toMaterialResponse(saved);
+    }
+
+    @Async
+    public void triggerAgentForMaterial(String userId, UUID courseId, UUID materialId,
+                                        int dailyStudyMinutes, String preferredDays) {
+        Material material = materialRepository.findByIdAndUserId(materialId, userId)
+                .orElseThrow(() -> new IllegalStateException("Material not found for agent: " + materialId));
+        material.setStatus("processing");
+        materialRepository.save(material);
+
+        boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
+        studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
     }
 
     @Transactional
@@ -188,6 +188,7 @@ public class CourseService {
     private CourseResponse toResponse(String userId, Course course, boolean includeHidden, String alertMessage) {
         return new CourseResponse(
                 course.getId(),
+                course.getUserId(),
                 course.getName(),
                 course.getCourseCode(),
                 course.getImageUrl(),
@@ -201,7 +202,7 @@ public class CourseService {
 
     private MaterialResponse toMaterialResponse(Material material) {
         double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
-        return new MaterialResponse(material.getId(), material.getName(), material.getPageCount(), sizeMb,
+        return new MaterialResponse(material.getId(), material.getName(), sizeMb,
                 material.getStatus(), material.getUploadedAt());
     }
 

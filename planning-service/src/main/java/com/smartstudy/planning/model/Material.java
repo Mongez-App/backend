@@ -44,8 +44,6 @@ public class Material {
     @Column(nullable = false)
     private Long fileSizeBytes;
 
-    private Integer pageCount;
-
     @Column(nullable = false)
     private String status;
 

@@ -1,16 +1,13 @@
 package com.smartstudy.planning.controller;
 
-import com.smartstudy.planning.dto.request.RescheduleRoadmapRequest;
 import com.smartstudy.planning.dto.response.RoadmapResponse;
 import com.smartstudy.planning.service.RoadmapService;
 import com.smartstudy.shared.logging.LoggerFactory;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -37,8 +34,9 @@ public class RoadmapController {
     @PostMapping("/reschedule")
     public RoadmapResponse reschedule(
             @RequestHeader("X-User-Id") String userId,
-            @Valid @RequestBody RescheduleRoadmapRequest request) {
+            @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes,
+            @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         log.info("Incoming request: POST /roadmap/reschedule | userId: {}", userId);
-        return roadmapService.reschedule(userId, request);
+        return roadmapService.reschedule(userId, dailyStudyMinutes, preferredDays);
     }
 }

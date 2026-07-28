@@ -1,6 +1,5 @@
 package com.smartstudy.planning.controller;
 
-import com.smartstudy.planning.ai.model.AgentCheckResult;
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.*;
@@ -9,7 +8,6 @@ import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.request.CreateEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.service.EventService;
-import com.smartstudy.planning.service.StudyPlannerAgent;
 import com.smartstudy.planning.service.TaskService;
 import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
@@ -32,7 +30,6 @@ public class CourseController {
 
     private static final Logger log = LoggerFactory.getLogger(CourseController.class);
     private final CourseService courseService;
-    private final StudyPlannerAgent studyPlannerAgent;
     private final TaskService taskService;
     private final EventService eventService;
 
@@ -103,18 +100,6 @@ public class CourseController {
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         log.info("Incoming request: POST /courses/{}/materials | userId: {}", courseId, userId);
         return courseService.createMaterial(userId, courseId, file, dailyStudyMinutes, preferredDays);
-    }
-
-    @PostMapping("/{courseId}/reschedule")
-    public StatusResponse checkSchedule(
-            @RequestHeader("X-User-Id") String userId,
-            @PathVariable UUID courseId,
-            @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes,
-            @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
-        log.info("Check-schedule request: userId={} courseId={} daily={} days={}", userId, courseId, dailyStudyMinutes, preferredDays);
-        courseService.getOwnedCourse(userId, courseId);
-        AgentCheckResult result = studyPlannerAgent.checkAndReschedule(userId, courseId, dailyStudyMinutes, preferredDays);
-        return new StatusResponse(result.status(), result.alert());
     }
 
     @DeleteMapping("/{courseId}/materials/{materialId}")

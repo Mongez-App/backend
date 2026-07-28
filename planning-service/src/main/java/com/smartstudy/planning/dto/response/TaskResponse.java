@@ -13,6 +13,7 @@ public record TaskResponse(
         @JsonProperty("priority") Priority priority,
         @JsonProperty("is_completed") boolean isCompleted,
         @JsonProperty("date") LocalDate date,
-        @JsonProperty("course_id") UUID courseId
+        @JsonProperty("course_id") UUID courseId,
+        @JsonProperty("sequence_order") Integer sequenceOrder
 ) {
 }

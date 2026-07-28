@@ -1,11 +1,11 @@
 package com.smartstudy.planning.service;
 
-import com.smartstudy.planning.dto.request.RescheduleRoadmapRequest;
+import com.smartstudy.planning.ai.model.AgentCheckResult;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.RoadmapResponse;
 import com.smartstudy.planning.model.Course;
-import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.model.Event;
+import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
@@ -36,6 +36,7 @@ public class RoadmapService {
     private final StudyBlockRepository studyBlockRepository;
     private final CourseRepository courseRepository;
     private final EventRepository eventRepository;
+    private final StudyPlannerAgent studyPlannerAgent;
 
     @Transactional(readOnly = true)
     public RoadmapResponse getWeeklyRoadmap(String userId, LocalDate startDate) {
@@ -44,15 +45,11 @@ public class RoadmapService {
     }
 
     @Transactional
-    public RoadmapResponse reschedule(String userId, RescheduleRoadmapRequest request) {
-        log.info("Rescheduling blocks {} for userId: {}", request.blockIds(), userId);
-        List<StudyBlock> blocks = studyBlockRepository.findByIdInAndUserId(request.blockIds(), userId);
-        LocalDate targetDate = LocalDate.now().plusDays(1);
-        blocks.forEach(block -> block.setScheduledDate(targetDate));
-        LocalDate startDate = weekStart(targetDate);
-        String message = blocks.size() + " study block" + (blocks.size() == 1 ? " was" : "s were")
-                + " moved to " + targetDate.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + ".";
-        return buildWeeklyResponse(userId, startDate, new AlertResponse(message));
+    public RoadmapResponse reschedule(String userId, int dailyStudyMinutes, String preferredDays) {
+        log.info("Rescheduling roadmap for userId: {}", userId);
+        AgentCheckResult result = studyPlannerAgent.checkAndRescheduleRoadmap(userId, dailyStudyMinutes, preferredDays);
+        LocalDate startDate = weekStart(LocalDate.now().plusDays(1));
+        return buildWeeklyResponse(userId, startDate, result.alert());
     }
 
     private RoadmapResponse buildWeeklyResponse(String userId, LocalDate startDate, AlertResponse alert) {

@@ -63,6 +63,7 @@ public class TaskService {
                 .priority(request.priority())
                 .completed(false)
                 .scheduledDate(request.date() != null ? request.date() : LocalDate.now())
+                .sequenceOrder(request.sequenceOrder())
                 .build();
         return taskMapper.toResponse(taskRepository.save(task));
     }
@@ -85,6 +86,9 @@ public class TaskService {
         }
         if (request.date() != null) {
             task.setScheduledDate(request.date());
+        }
+        if (request.sequenceOrder() != null) {
+            task.setSequenceOrder(request.sequenceOrder());
         }
         return taskMapper.toResponse(task);
     }

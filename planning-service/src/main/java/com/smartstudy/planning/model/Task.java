@@ -53,14 +53,6 @@ public class Task {
     @Column(nullable = false)
     private LocalDate scheduledDate;
 
-    @Column(nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @PrePersist
-    void onCreate() {
-        createdAt = Instant.now();
-    }
-
     @Column(name = "material_id")
     private UUID materialId;
 
@@ -78,4 +70,12 @@ public class Task {
 
     @Column(nullable = false)
     private boolean missed;
+
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @PrePersist
+    void onCreate() {
+        createdAt = Instant.now();
+    }
 }

@@ -6,7 +6,9 @@ import com.smartstudy.planning.ai.tool.MissedTaskDetectorTool;
 import com.smartstudy.planning.ai.tool.PdfExtractorTool;
 import com.smartstudy.planning.ai.tool.SchedulerEngineTool;
 import com.smartstudy.planning.dto.response.AlertResponse;
+import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Task;
+import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +34,7 @@ public class StudyPlannerAgent {
     private final MissedTaskDetectorTool missedTaskDetectorTool;
     private final AiSchedulePersistenceService aiSchedulePersistenceService;
     private final TaskRepository taskRepository;
+    private final CourseRepository courseRepository;
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper;
 
@@ -63,50 +66,60 @@ public class StudyPlannerAgent {
     }
 
     @Transactional
-    public AgentCheckResult checkAndReschedule(String userId, UUID courseId,
-                                               int dailyStudyMinutes, String preferredDays) {
+    public AgentCheckResult checkAndRescheduleRoadmap(String userId,
+                                                      int dailyStudyMinutes, String preferredDays) {
         try {
-            MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, courseId);
-
-            if (summary.missedCount() == 0) {
-                return new AgentCheckResult("ok", null);
+            List<Course> courses = courseRepository.findByUserIdOrderByCreatedAtAsc(userId);
+            if (courses.isEmpty()) {
+                return new AgentCheckResult("ok", new AlertResponse("No courses found in your roadmap."));
             }
 
-            if (!summary.requiresFullReschedule()) {
-                return new AgentCheckResult("ok", new AlertResponse(summary.missedCount() + " missed tasks detected."));
+            int totalRescheduled = 0;
+
+            for (Course course : courses) {
+                MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, course.getId());
+
+                if (summary.missedCount() == 0 || !summary.requiresFullReschedule()) {
+                    continue;
+                }
+
+                log.info("Performing full reschedule for course {} ({} missed tasks)", course.getId(), summary.missedCount());
+                aiSchedulePersistenceService.fullReschedule(userId, course.getId());
+
+                List<ExtractedTask> remainingTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, course.getId())
+                        .stream()
+                        .sorted(Comparator
+                                .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
+                                .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
+                        .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
+                                t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null))
+                        .toList();
+
+                List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
+                        userId, course.getId().toString(), dailyStudyMinutes, preferredDays);
+
+                ScheduleResult scheduleResult = schedulerEngineTool.schedule(remainingTasks, slots);
+
+                if (scheduleResult.overCapacity()) {
+                    log.warn("Over capacity after reschedule for course {}: {} unscheduled", course.getId(), scheduleResult.unscheduledTasks().size());
+                    continue;
+                }
+
+                aiSchedulePersistenceService.persist(userId, course.getId(), null, scheduleResult.scheduledParts(), false);
+                totalRescheduled += summary.missedCount();
             }
 
-            log.info("Performing full reschedule for course {} ({} missed tasks)", courseId, summary.missedCount());
-            aiSchedulePersistenceService.fullReschedule(userId, courseId);
-
-            List<ExtractedTask> remainingTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, courseId)
-                    .stream()
-                    .sorted(Comparator
-                            .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
-                            .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
-                    .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
-                            t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null))
-                    .toList();
-
-            List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
-                    userId, courseId.toString(), dailyStudyMinutes, preferredDays);
-
-            ScheduleResult scheduleResult = schedulerEngineTool.schedule(remainingTasks, slots);
-
-            if (scheduleResult.overCapacity()) {
-                log.warn("Over capacity after reschedule for course {}: {} unscheduled", courseId, scheduleResult.unscheduledTasks().size());
-                return new AgentCheckResult("ok", new AlertResponse(
-                        "Some missed tasks could not be rescheduled before your exam date. No changes were made \u2014 consider adding more study days or increasing your daily study time."));
+            if (totalRescheduled > 0) {
+                return new AgentCheckResult("rescheduled", new AlertResponse(
+                        totalRescheduled + " missed tasks were rescheduled across your roadmap."));
             }
 
-            aiSchedulePersistenceService.persist(userId, courseId, null, scheduleResult.scheduledParts(), false);
-            return new AgentCheckResult("rescheduled", new AlertResponse(
-                    summary.missedCount() + " missed tasks were rescheduled around your available study days."));
+            return new AgentCheckResult("ok", null);
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            log.error("Failed to check schedule for course {}: {}", courseId, ex.getMessage(), ex);
-            return new AgentCheckResult("error", new AlertResponse("Schedule check failed: " + ex.getMessage()));
+            log.error("Failed to check roadmap schedule: {}", ex.getMessage(), ex);
+            return new AgentCheckResult("error", new AlertResponse("Roadmap schedule check failed: " + ex.getMessage()));
         }
     }
 

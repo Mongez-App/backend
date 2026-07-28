@@ -14,6 +14,7 @@ public record CreateTaskRequest(
         @NotNull @Positive @JsonProperty("duration_minutes") Integer durationMinutes,
         @NotNull @JsonProperty("priority") Priority priority,
         @JsonProperty("date") LocalDate date,
-        @JsonProperty("course_id") UUID courseId
+        @JsonProperty("course_id") UUID courseId,
+        @JsonProperty("sequence_order") Integer sequenceOrder
 ) {
 }

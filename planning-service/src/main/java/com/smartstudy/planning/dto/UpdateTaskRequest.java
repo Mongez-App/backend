@@ -11,6 +11,7 @@ public record UpdateTaskRequest(
         @Positive @JsonProperty("duration_minutes") Integer durationMinutes,
         @JsonProperty("priority") Priority priority,
         @JsonProperty("is_completed") Boolean isCompleted,
-        @JsonProperty("date") LocalDate date
+        @JsonProperty("date") LocalDate date,
+        @JsonProperty("sequence_order") Integer sequenceOrder
 ) {
 }

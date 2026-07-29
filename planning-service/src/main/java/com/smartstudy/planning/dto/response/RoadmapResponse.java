@@ -18,13 +18,6 @@ public record RoadmapResponse(
             @JsonProperty("week_number") int weekNumber,
             @JsonProperty("start_date") LocalDate startDate,
             @JsonProperty("end_date") LocalDate endDate,
-            @JsonProperty("days") List<DayResponse> days
-    ) {
-    }
-
-    public record DayResponse(
-            @JsonProperty("date") LocalDate date,
-            @JsonProperty("day_name") String dayName,
             @JsonProperty("study_blocks") List<StudyBlockResponse> studyBlocks
     ) {
     }
@@ -36,7 +29,17 @@ public record RoadmapResponse(
             @JsonProperty("topic") String topic,
             @JsonProperty("duration_minutes") Integer durationMinutes,
             @JsonProperty("is_completed") boolean completed,
-            @JsonProperty("events") List<EventResponse> events
+            @JsonProperty("events") RoadmapEventResponse events
+    ) {
+    }
+
+    public record RoadmapEventResponse(
+            @JsonProperty("event_id") String eventId,
+            @JsonProperty("course_id") UUID courseId,
+            @JsonProperty("course_name") String courseName,
+            @JsonProperty("title") String title,
+            @JsonProperty("event_type") String eventType,
+            @JsonProperty("event_date") String eventDate
     ) {
     }
 }

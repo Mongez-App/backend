@@ -84,7 +84,8 @@ public class EventController {
         String title = node.has("title") ? node.get("title").asText(null) : null;
         String startDate = node.has("startDate") ? node.get("startDate").asText(null) : null;
         String endDate = node.has("endDate") && !node.get("endDate").isNull() ? node.get("endDate").asText(null) : null;
+        String eventType = node.has("event_type") && !node.get("event_type").isNull() ? node.get("event_type").asText(null) : null;
 
-        return new CreateEventRequest(title, startDate, endDate);
+        return new CreateEventRequest(title, startDate, endDate, eventType);
     }
 }

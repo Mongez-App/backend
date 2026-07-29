@@ -39,4 +39,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     List<Task> findByUserIdAndCourseIdAndCompletedFalse(String userId, UUID courseId);
 
     boolean existsByCourseIdAndUserIdAndMaterialIdIsNotNull(UUID courseId, String userId);
+
+    List<Task> findByUserIdAndScheduledDateBetweenOrderByScheduledDateAscCreatedAtAsc(
+            String userId, LocalDate startDate, LocalDate endDate);
 }

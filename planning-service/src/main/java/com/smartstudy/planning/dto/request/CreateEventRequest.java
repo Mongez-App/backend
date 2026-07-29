@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 public record CreateEventRequest(
         @NotBlank @JsonProperty("title") String title,
         @NotBlank @JsonProperty("startDate") String startDate,
-        @JsonProperty("endDate") String endDate
+        @JsonProperty("endDate") String endDate,
+        @JsonProperty("event_type") String eventType
 ) {
 }

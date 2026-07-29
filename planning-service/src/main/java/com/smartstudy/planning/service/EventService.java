@@ -54,6 +54,7 @@ public class EventService {
                         .title(request.title())
                         .startDate(startInstant)
                         .endDate(endInstant)
+                        .eventType(request.eventType())
                         .build();
                 Event saved = eventRepository.save(event);
                 createdResponses.add(toEventResponse(saved));
@@ -94,6 +95,7 @@ public class EventService {
                 .startDate(startInstant)
                 .endDate(endInstant)
                 .courseId(courseId)
+                .eventType(request.eventType())
                 .build();
         Event saved = eventRepository.save(event);
         return new AlertResponse("Event created successfully");

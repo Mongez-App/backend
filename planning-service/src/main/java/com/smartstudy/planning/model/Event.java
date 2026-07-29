@@ -44,6 +44,9 @@ public class Event {
     @Column(name = "course_id")
     private UUID courseId;
 
+    @Column(name = "event_type")
+    private String eventType;
+
     @Column(name = "task_id")
     private UUID taskId;
 

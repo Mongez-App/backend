@@ -3,6 +3,7 @@ package com.smartstudy.planning.service;
 import com.smartstudy.planning.ai.model.ScheduledPart;
 import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
@@ -41,7 +42,7 @@ public class AiSchedulePersistenceService {
                     .materialId(materialId)
                     .title(part.title())
                     .durationMinutes(part.minutes())
-                    .priority(com.smartstudy.planning.model.Priority.MEDIUM)
+                    .priority(part.priority() != null ? part.priority() : Priority.MEDIUM)
                     .completed(false)
                     .scheduledDate(part.date())
                     .sequenceOrder(part.sequence())

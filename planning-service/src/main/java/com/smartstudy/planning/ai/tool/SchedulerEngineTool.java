@@ -4,6 +4,7 @@ import com.smartstudy.planning.ai.model.AvailableSlot;
 import com.smartstudy.planning.ai.model.ExtractedTask;
 import com.smartstudy.planning.ai.model.ScheduleResult;
 import com.smartstudy.planning.ai.model.ScheduledPart;
+import com.smartstudy.planning.model.Priority;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
@@ -18,10 +19,12 @@ public class SchedulerEngineTool {
 
     private static final int MIN_SLOT_MINUTES = 20;
 
-    @Tool(name = "schedule_tasks", description = "Schedule a list of ordered study tasks into available time slots. Tasks must remain in sequenceOrder. Minimum allocation is 20 minutes. Returns ScheduleResult with scheduled parts, unscheduled tasks, and overCapacity flag.")
+    @Tool(name = "schedule_tasks", description = "Schedule a list of ordered study tasks into available time slots. Tasks are sorted by priority (HIGH first) then by sequenceOrder. Tasks of the same material must maintain their relative sequenceOrder. Minimum allocation is 20 minutes. Returns ScheduleResult with scheduled parts, unscheduled tasks, and overCapacity flag.")
     public ScheduleResult schedule(List<ExtractedTask> tasks, List<AvailableSlot> slots) {
         tasks = new ArrayList<>(tasks);
-        tasks.sort(Comparator.comparingInt(ExtractedTask::sequenceOrder));
+        tasks.sort(Comparator
+                .comparingInt((ExtractedTask t) -> t.priority() != null ? t.priority().ordinal() : Priority.MEDIUM.ordinal())
+                .thenComparingInt(ExtractedTask::sequenceOrder));
 
         List<AvailableSlot> slotList = new ArrayList<>(slots);
         slotList.sort(Comparator.comparing(AvailableSlot::date));
@@ -49,7 +52,8 @@ public class SchedulerEngineTool {
                         allocate,
                         task.sequenceOrder(),
                         totalParts > 1 ? partNumber : null,
-                        totalParts > 1 ? totalParts : null
+                        totalParts > 1 ? totalParts : null,
+                        task.priority() != null ? task.priority() : Priority.MEDIUM
                 );
                 parts.add(part);
                 remainingMinutes[i] -= allocate;

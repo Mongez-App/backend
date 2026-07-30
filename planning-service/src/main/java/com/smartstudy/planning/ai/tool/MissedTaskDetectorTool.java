@@ -34,7 +34,9 @@ public class MissedTaskDetectorTool {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
 
         LocalDate today = LocalDate.now();
-        LocalDate examDate = course.getExamDate().atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate examDate = course.getExamDate() != null
+                ? course.getExamDate().atZone(ZoneOffset.UTC).toLocalDate()
+                : LocalDate.now().plusYears(1);
         long daysToExam = ChronoUnit.DAYS.between(today, examDate);
 
         List<Task> missedTasks = taskRepository.findByUserIdAndCourseIdAndScheduledDateBeforeAndCompletedFalseAndMissedFalse(

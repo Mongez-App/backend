@@ -1,5 +1,6 @@
 package com.smartstudy.planning.ai.tool;
 
+import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.TaskRepository;
@@ -36,11 +37,11 @@ public class CalendarQuerierTool {
         Set<DayOfWeek> preferred = parsePreferredDays(preferredDays);
         LocalDate today = LocalDate.now();
         LocalDate startDate = LocalTime.now().isBefore(LocalTime.of(14, 0)) ? today : today.plusDays(1);
-        LocalDate examDate = courseRepository.findByIdAndUserId(parsedCourseId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"))
-                .getExamDate()
-                .atZone(java.time.ZoneOffset.UTC)
-                .toLocalDate();
+        Course course = courseRepository.findByIdAndUserId(parsedCourseId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+        LocalDate examDate = course.getExamDate() != null
+                ? course.getExamDate().atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                : LocalDate.now().plusYears(1);
 
         List<AvailableSlot> slots = new ArrayList<>();
         for (LocalDate date = startDate; date.isBefore(examDate); date = date.plusDays(1)) {

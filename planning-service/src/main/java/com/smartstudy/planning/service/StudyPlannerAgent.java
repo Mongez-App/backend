@@ -7,6 +7,7 @@ import com.smartstudy.planning.ai.tool.PdfExtractorTool;
 import com.smartstudy.planning.ai.tool.SchedulerEngineTool;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.model.Course;
+import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.TaskRepository;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -44,6 +47,14 @@ public class StudyPlannerAgent {
             String rawText = pdfExtractorTool.extract(materialId.toString());
             List<ExtractedTask> tasks = extractTasksFromText(rawText, materialId);
 
+            Course course = courseRepository.findByIdAndUserId(courseId, userId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            org.springframework.http.HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+            LocalDate examDate = course.getExamDate() != null
+                    ? course.getExamDate().atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    : LocalDate.now().plusYears(1);
+            assignPriorities(tasks, materialId, examDate);
+
             List<AvailableSlot> slots = calendarQuerierTool.query(
                     userId, courseId.toString(), dailyStudyMinutes, preferredDays);
 
@@ -62,6 +73,32 @@ public class StudyPlannerAgent {
         } catch (Exception ex) {
             log.error("Failed to generate plan for material {}: {}", materialId, ex.getMessage(), ex);
             return new AgentPlanResult("error", new AlertResponse("Failed to generate study plan: " + ex.getMessage()));
+        }
+    }
+
+    private void assignPriorities(List<ExtractedTask> tasks, UUID materialId, LocalDate examDate) {
+        LocalDate today = LocalDate.now();
+        long daysToExam = ChronoUnit.DAYS.between(today, examDate);
+        int size = tasks.size();
+        if (size == 0) return;
+
+        for (int i = 0; i < size; i++) {
+            ExtractedTask task = tasks.get(i);
+            Priority priority;
+            if (i == 0 || i == 1 || daysToExam <= 7) {
+                priority = Priority.HIGH;
+            } else if (i < size / 2 || daysToExam <= 14) {
+                priority = Priority.MEDIUM;
+            } else {
+                priority = Priority.LOW;
+            }
+            tasks.set(i, new ExtractedTask(
+                    task.title(),
+                    task.estimatedMinutes(),
+                    task.sequenceOrder(),
+                    task.notes(),
+                    priority
+            ));
         }
     }
 
@@ -92,7 +129,7 @@ public class StudyPlannerAgent {
                                 .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
                                 .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
                         .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
-                                t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null))
+                                t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null, t.getPriority()))
                         .toList();
 
                 List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(

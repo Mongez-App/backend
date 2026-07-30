@@ -35,4 +35,8 @@ management:
 
 smartstudy:
   agent:
-    min-split-minutes: 20
+    min-split-minutes: 1
+    max-split-minutes: 60
+  url-course:
+    min-split-minutes: 1
+    max-split-minutes: 60

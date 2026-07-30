@@ -175,9 +175,17 @@ public class CourseService {
                 int remaining = duration;
                 int partNumber = 0;
                 int totalParts = (int) Math.ceil((double) duration / effectiveMax);
+                LocalDate currentDate = startDate;
+                int dayRemaining = dailyStudyMinutes;
 
                 while (remaining > 0) {
                     int chunk = Math.min(remaining, effectiveMax);
+
+                    if (chunk > dayRemaining) {
+                        currentDate = currentDate.plusDays(1);
+                        dayRemaining = dailyStudyMinutes;
+                    }
+
                     partNumber++;
                     taskRepository.save(Task.builder()
                             .userId(userId)
@@ -186,13 +194,14 @@ public class CourseService {
                             .durationMinutes(chunk)
                             .priority(Priority.MEDIUM)
                             .completed(false)
-                            .scheduledDate(startDate)
+                            .scheduledDate(currentDate)
                             .sequenceOrder(sequenceOrder++)
                             .splitPart(partNumber)
                             .totalParts(totalParts)
                             .locked(false)
                             .missed(false)
                             .build());
+                    dayRemaining -= chunk;
                     remaining -= chunk;
                 }
             }

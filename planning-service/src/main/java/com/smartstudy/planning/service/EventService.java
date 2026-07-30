@@ -7,8 +7,10 @@ import com.smartstudy.planning.dto.response.EventsResponse;
 import com.smartstudy.planning.exception.ValidationException;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Event;
+import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
+import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -19,8 +21,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +34,7 @@ public class EventService {
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
     private final EventRepository eventRepository;
     private final CourseRepository courseRepository;
+    private final TaskRepository taskRepository;
 
     @Transactional
     public EventsResponse createEvents(String userId, List<CreateEventRequest> requests) {
@@ -98,7 +104,75 @@ public class EventService {
                 .eventType(request.eventType())
                 .build();
         Event saved = eventRepository.save(event);
+
+        if (saved.getCourseId() != null) {
+            rescheduleCourseTasksBeforeEvent(saved);
+        }
+
         return new AlertResponse("Event created successfully");
+    }
+
+    private void rescheduleCourseTasksBeforeEvent(Event event) {
+        LocalDate eventDate = event.getStartDate().atZone(ZoneOffset.UTC).toLocalDate();
+        UUID courseId = event.getCourseId();
+        String userId = event.getUserId();
+
+        List<Task> tasksToReschedule = taskRepository
+                .findByUserIdAndCourseIdAndScheduledDateGreaterThanEqualAndLockedFalseAndCompletedFalseAndMissedFalse(
+                        userId, courseId, eventDate);
+
+        if (tasksToReschedule.isEmpty()) {
+            log.info("No tasks to reschedule for course {} before event on {}", courseId, eventDate);
+            return;
+        }
+
+        log.info("Rescheduling {} tasks for course {} before event on {}",
+                tasksToReschedule.size(), courseId, eventDate);
+
+        Map<UUID, List<Task>> byMaterial = tasksToReschedule.stream()
+                .collect(Collectors.groupingBy(t -> t.getMaterialId() != null ? t.getMaterialId() : UUID.randomUUID()));
+
+        List<Task> updatedTasks = new ArrayList<>();
+        LocalDate assignmentDate = eventDate.minusDays(1);
+
+        List<UUID> materialKeys = new ArrayList<>(byMaterial.keySet());
+        materialKeys.sort((a, b) -> {
+            List<Task> tasksA = byMaterial.get(a);
+            List<Task> tasksB = byMaterial.get(b);
+            int minSeqA = tasksA.stream().mapToInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0).min().orElse(0);
+            int minSeqB = tasksB.stream().mapToInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0).min().orElse(0);
+            return Integer.compare(minSeqA, minSeqB);
+        });
+
+        for (UUID materialKey : materialKeys) {
+            List<Task> materialTasks = byMaterial.get(materialKey);
+            materialTasks.sort(Comparator.comparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0));
+
+            for (Task task : materialTasks) {
+                LocalDate nearestEventDate = findNearestEventDateAfter(userId, courseId, eventDate, task.getScheduledDate());
+                if (nearestEventDate != null && assignmentDate.isAfter(nearestEventDate)) {
+                    assignmentDate = nearestEventDate.minusDays(1);
+                }
+                task.setScheduledDate(assignmentDate);
+                updatedTasks.add(task);
+                assignmentDate = assignmentDate.minusDays(1);
+            }
+        }
+
+        taskRepository.saveAll(updatedTasks);
+        log.info("Rescheduled {} tasks for course {} before event on {}",
+                updatedTasks.size(), courseId, eventDate);
+    }
+
+    private LocalDate findNearestEventDateAfter(String userId, UUID courseId, LocalDate fromDate, LocalDate taskDate) {
+        LocalDate nearestEventDate = eventRepository.findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
+                userId, courseId, fromDate.atStartOfDay().toInstant(ZoneOffset.UTC))
+                .map(e -> e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate())
+                .orElse(null);
+        if (nearestEventDate != null && nearestEventDate.isBefore(taskDate)) {
+            return null;
+        }
+        return nearestEventDate;
     }
 
     private void validateEventRequest(CreateEventRequest request) {

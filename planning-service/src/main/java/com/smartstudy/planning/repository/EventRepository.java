@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -18,4 +19,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Event> findByUserIdAndStartDateBetween(String userId, Instant startDate, Instant endDate);
 
     List<Event> findByUserIdAndTaskIdIsNullAndStartDateBetween(String userId, Instant startDate, Instant endDate);
+
+    Optional<Event> findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
+            String userId, UUID courseId, Instant date);
 }

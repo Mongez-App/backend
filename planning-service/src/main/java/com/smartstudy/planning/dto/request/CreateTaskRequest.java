@@ -12,7 +12,7 @@ import java.util.UUID;
 public record CreateTaskRequest(
         @NotBlank @JsonProperty("title") String title,
         @NotNull @Positive @JsonProperty("duration_minutes") Integer durationMinutes,
-        @NotNull @JsonProperty("priority") Priority priority,
+        @JsonProperty("priority") Priority priority,
         @JsonProperty("date") LocalDate date,
         @JsonProperty("course_id") UUID courseId,
         @JsonProperty("sequence_order") Integer sequenceOrder

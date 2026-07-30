@@ -3,6 +3,7 @@ package com.smartstudy.planning.service;
 import com.smartstudy.planning.dto.request.CreateTaskRequest;
 import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.UpdateTaskRequest;
+import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.TaskRepository;
@@ -27,12 +28,15 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
     private final TaskMapper taskMapper;
+    private final TaskPriorityService taskPriorityService;
 
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasks(String userId, LocalDate date) {
         log.info("Fetching tasks for userId: {} | date: {}", userId, date);
-        return taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
-                .stream()
+        List<Task> tasks = date != null
+                ? taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
+                : taskRepository.findByUserIdOrderByCreatedAtAsc(userId);
+        return tasks.stream()
                 .map(taskMapper::toResponse)
                 .toList();
     }
@@ -55,14 +59,16 @@ public class TaskService {
     @Transactional
     public TaskResponse createTask(String userId, CreateTaskRequest request) {
         log.info("Creating task for userId: {} | title: {}", userId, request.title());
+        LocalDate scheduledDate = request.date() != null ? request.date() : LocalDate.now();
+        Priority priority = taskPriorityService.determinePriority(userId, request.courseId(), scheduledDate);
         Task task = Task.builder()
                 .userId(userId)
                 .courseId(request.courseId())
                 .title(request.title())
                 .durationMinutes(request.durationMinutes())
-                .priority(request.priority())
+                .priority(priority)
                 .completed(false)
-                .scheduledDate(request.date() != null ? request.date() : LocalDate.now())
+                .scheduledDate(scheduledDate)
                 .sequenceOrder(request.sequenceOrder())
                 .build();
         return taskMapper.toResponse(taskRepository.save(task));

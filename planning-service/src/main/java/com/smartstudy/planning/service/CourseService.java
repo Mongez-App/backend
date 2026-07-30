@@ -1,14 +1,19 @@
 package com.smartstudy.planning.service;
 
+import com.smartstudy.planning.ai.model.AgentPlanResult;
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.CourseResponse;
 import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
+import com.smartstudy.planning.dto.scraper.ScraperImportResponse;
 import com.smartstudy.planning.model.Course;
+import com.smartstudy.planning.model.CourseType;
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.StudyBlock;
+import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
@@ -16,10 +21,17 @@ import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,8 +40,11 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -37,12 +52,20 @@ import java.util.UUID;
 public class CourseService {
 
     private static final Logger log = LoggerFactory.getLogger(CourseService.class);
+    private static final String SCRAPER_URL = "https://mongez-scraper.vercel.app/api/v1/imports";
     private final CourseRepository courseRepository;
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
     private final StudyPlannerAgent studyPlannerAgent;
+    private final RestTemplateBuilder restTemplateBuilder;
     private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
+
+    @Value("${smartstudy.url-course.min-split-minutes:1}")
+    private int minSplitMinutes;
+
+    @Value("${smartstudy.url-course.max-split-minutes:60}")
+    private int maxSplitMinutes;
 
     @Transactional(readOnly = true)
     public List<CourseResponse> getCourses(String userId) {
@@ -60,8 +83,14 @@ public class CourseService {
     }
 
     @Transactional
-    public CourseResponse createCourse(String userId, CreateCourseRequest request) {
-        log.info("Creating course for userId: {} | name: {}", userId, request.name());
+    public CourseResponse createCourse(String userId, CreateCourseRequest request, int dailyStudyMinutes) {
+        CourseType courseType = request.courseType() != null ? request.courseType() : CourseType.MATERIAL_COURSE;
+        String materialUrl = request.materialUrl();
+
+        if (courseType == CourseType.URL_COURSE && (materialUrl == null || materialUrl.isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_URL_REQUIRED_FOR_URL_COURSE");
+        }
+
         Course course = Course.builder()
                 .userId(userId)
                 .name(request.name())
@@ -69,12 +98,105 @@ public class CourseService {
                 .imageUrl(request.imageUrl())
                 .startDate(request.startDate())
                 .examDate(request.examDate())
-                .hasMaterials(Boolean.TRUE.equals(request.hasMaterials()))
+                .courseType(courseType)
+                .materialUrl(materialUrl)
                 .hidden(false)
                 .build();
+
+        List<ScraperImportResponse.ScraperResource> scraperResources = null;
+
+        if (courseType == CourseType.URL_COURSE) {
+            scraperResources = callScraperAndGetResources(materialUrl);
+        }
+
         Course saved = courseRepository.save(course);
+
+        if (scraperResources != null && !scraperResources.isEmpty()) {
+            importUrlCourseResources(userId, saved.getId(), saved.getStartDate().atZone(ZoneOffset.UTC).toLocalDate(), dailyStudyMinutes, scraperResources);
+        }
+
         createInitialStudyBlock(userId, saved);
         return toResponse(userId, saved, false, "Your roadmap has been generated for " + saved.getName() + ".");
+    }
+
+    private List<ScraperImportResponse.ScraperResource> callScraperAndGetResources(String materialUrl) {
+        log.info("Calling scraper API for URL: {}", materialUrl);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        Map<String, String> body = new HashMap<>();
+        body.put("url", materialUrl);
+        HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(body, headers);
+
+        try {
+            RestTemplate restTemplate = restTemplateBuilder.build();
+            ResponseEntity<ScraperImportResponse> response = restTemplate.exchange(
+                    SCRAPER_URL,
+                    HttpMethod.POST,
+                    requestEntity,
+                    ScraperImportResponse.class
+            );
+
+            ScraperImportResponse scraperResponse = response.getBody();
+            if (scraperResponse == null || !scraperResponse.isSuccess() || scraperResponse.getData() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SCRAPER_IMPORT_FAILED");
+            }
+
+            return scraperResponse.getData().getResources();
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Scraper API call failed for URL: {}", materialUrl, ex);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SCRAPER_IMPORT_FAILED");
+        }
+    }
+
+    private void importUrlCourseResources(String userId, UUID courseId, LocalDate startDate, int dailyStudyMinutes, List<ScraperImportResponse.ScraperResource> resources) {
+        int effectiveMax = Math.min(maxSplitMinutes, dailyStudyMinutes);
+        int sequenceOrder = 0;
+
+        for (ScraperImportResponse.ScraperResource resource : resources) {
+            int duration = resource.getDuration();
+            String resourceName = resource.getName();
+
+            if (duration <= effectiveMax || effectiveMax <= minSplitMinutes) {
+                taskRepository.save(Task.builder()
+                        .userId(userId)
+                        .courseId(courseId)
+                        .title(resourceName)
+                        .durationMinutes(duration)
+                        .priority(Priority.MEDIUM)
+                        .completed(false)
+                        .scheduledDate(startDate)
+                        .sequenceOrder(sequenceOrder++)
+                        .locked(false)
+                        .missed(false)
+                        .build());
+            } else {
+                int remaining = duration;
+                int partNumber = 0;
+                int totalParts = (int) Math.ceil((double) duration / effectiveMax);
+
+                while (remaining > 0) {
+                    int chunk = Math.min(remaining, effectiveMax);
+                    partNumber++;
+                    taskRepository.save(Task.builder()
+                            .userId(userId)
+                            .courseId(courseId)
+                            .title(resourceName + " - Part " + partNumber)
+                            .durationMinutes(chunk)
+                            .priority(Priority.MEDIUM)
+                            .completed(false)
+                            .scheduledDate(startDate)
+                            .sequenceOrder(sequenceOrder++)
+                            .splitPart(partNumber)
+                            .totalParts(totalParts)
+                            .locked(false)
+                            .missed(false)
+                            .build());
+                    remaining -= chunk;
+                }
+            }
+        }
     }
 
     @Transactional
@@ -96,8 +218,11 @@ public class CourseService {
         if (request.examDate() != null) {
             course.setExamDate(request.examDate());
         }
-        if (request.hasMaterials() != null) {
-            course.setHasMaterials(request.hasMaterials());
+        if (request.courseType() != null) {
+            course.setCourseType(request.courseType());
+        }
+        if (request.materialUrl() != null) {
+            course.setMaterialUrl(request.materialUrl());
         }
         if (request.hidden() != null) {
             course.setHidden(request.hidden());
@@ -141,7 +266,6 @@ public class CourseService {
                 .status("pending")
                 .build();
         Material saved = materialRepository.save(material);
-        course.setHasMaterials(true);
 
         try {
             Files.createDirectories(MATERIAL_UPLOAD_DIR);
@@ -167,8 +291,23 @@ public class CourseService {
         material.setStatus("processing");
         materialRepository.save(material);
 
-        boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
-        studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
+        try {
+            boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
+            AgentPlanResult result = studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
+
+            if ("error".equals(result.status())) {
+                material.setStatus("failed");
+                log.error("Agent failed for material {}: {}", materialId, result.alert().message());
+            } else {
+                material.setStatus("completed");
+                log.info("Agent completed for material {}: status={}", materialId, result.status());
+            }
+            materialRepository.save(material);
+        } catch (Exception ex) {
+            log.error("Unexpected exception during agent processing for material {}: {}", materialId, ex.getMessage(), ex);
+            material.setStatus("failed");
+            materialRepository.save(material);
+        }
     }
 
     @Transactional
@@ -194,7 +333,8 @@ public class CourseService {
                 course.getImageUrl(),
                 course.getStartDate(),
                 course.getExamDate(),
-                materialRepository.countByCourseIdAndUserId(course.getId(), userId) > 0 || course.isHasMaterials(),
+                course.getCourseType(),
+                course.getMaterialUrl(),
                 includeHidden ? course.isHidden() : null,
                 completionPercentage(userId, course.getId()),
                 alertMessage != null ? new AlertResponse(alertMessage) : null);

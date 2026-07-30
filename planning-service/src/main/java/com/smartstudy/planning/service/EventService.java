@@ -1,5 +1,6 @@
 package com.smartstudy.planning.service;
 
+import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.request.CreateEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.EventResponse;
@@ -7,6 +8,7 @@ import com.smartstudy.planning.dto.response.EventsResponse;
 import com.smartstudy.planning.exception.ValidationException;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Event;
+import com.smartstudy.planning.model.EventType;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
@@ -82,34 +84,37 @@ public class EventService {
     }
 
     @Transactional
-    public AlertResponse createEvent(String userId, UUID courseId, CreateEventRequest request) {
+    public AlertResponse createCourseEvent(String userId, UUID courseId, CreateCourseEventRequest request) {
         log.info("Creating event for userId: {} | courseId: {}", userId, courseId);
-        validateEventRequest(request);
-        Instant startInstant = parseInstant(request.startDate());
-        Instant endInstant = request.endDate() != null && !request.endDate().isBlank()
-                ? parseInstant(request.endDate())
-                : null;
 
-        if (endInstant != null && endInstant.isBefore(startInstant)) {
-            throw new ValidationException("Event validation failed",
-                    List.of("endDate must be equal to or after startDate."));
-        }
+        EventType eventType = EventType.fromWireValue(request.eventType())
+                .orElseThrow(() -> new ValidationException("Invalid event data.",
+                        List.of("'event_type' must be one of: " + EventType.allowedValues())));
+        Instant eventInstant = parseEventDate(request.eventDate());
 
         Event event = Event.builder()
                 .userId(userId)
                 .title(request.title())
-                .startDate(startInstant)
-                .endDate(endInstant)
+                .startDate(eventInstant)
                 .courseId(courseId)
-                .eventType(request.eventType())
+                .eventType(eventType.wireValue())
                 .build();
         Event saved = eventRepository.save(event);
 
-        if (saved.getCourseId() != null) {
-            rescheduleCourseTasksBeforeEvent(saved);
-        }
+        rescheduleCourseTasksBeforeEvent(saved);
 
-        return new AlertResponse("Event created successfully");
+        return new AlertResponse(eventType.label()
+                + " added! Your AI roadmap has been updated with study tasks.");
+    }
+
+    /** POST /courses/{id}/events takes an ISO-8601 UTC instant, e.g. 2026-07-24T20:00:00Z. */
+    private Instant parseEventDate(String eventDate) {
+        try {
+            return Instant.parse(eventDate);
+        } catch (Exception e) {
+            throw new ValidationException("Invalid event data.",
+                    List.of("'event_date' must be an ISO-8601 UTC datetime, e.g. 2026-07-24T20:00:00Z."));
+        }
     }
 
     private void rescheduleCourseTasksBeforeEvent(Event event) {

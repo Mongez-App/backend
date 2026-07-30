@@ -5,7 +5,7 @@ import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.*;
 import com.smartstudy.planning.service.CourseService;
 import com.smartstudy.planning.dto.response.TaskResponse;
-import com.smartstudy.planning.dto.request.CreateEventRequest;
+import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.service.EventService;
 import com.smartstudy.planning.service.TaskService;
@@ -127,10 +127,10 @@ public class CourseController {
     public AlertResponse createEvent(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId,
-            @Valid @RequestBody CreateEventRequest request) {
+            @Valid @RequestBody CreateCourseEventRequest request) {
         log.info("Incoming request: POST /courses/{}/events | userId: {}", courseId, userId);
         validateUserId(userId);
-        return eventService.createEvent(userId, courseId, request);
+        return eventService.createCourseEvent(userId, courseId, request);
     }
 
     private void validateUserId(String userId) {

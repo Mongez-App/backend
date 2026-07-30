@@ -14,6 +14,7 @@ public record SessionResponse(
         @JsonProperty("started_at") Instant startedAt,
         @JsonProperty("duration_minutes_logged") Integer durationMinutesLogged,
         @JsonProperty("task_completed") Boolean taskCompleted,
+        @JsonProperty("completion_time") Instant completionTime,
         @JsonProperty("alert") AlertResponse alert
 ) {
 }

@@ -26,10 +26,16 @@ public record RoadmapResponse(
             @JsonProperty("block_id") UUID blockId,
             @JsonProperty("course_id") UUID courseId,
             @JsonProperty("course_name") String courseName,
+            @JsonProperty("tasks") List<RoadmapTaskResponse> tasks,
+            @JsonProperty("is_completed") boolean completed,
+            @JsonProperty("events") List<RoadmapEventResponse> events
+    ) {
+    }
+
+    public record RoadmapTaskResponse(
             @JsonProperty("topic") String topic,
             @JsonProperty("duration_minutes") Integer durationMinutes,
-            @JsonProperty("is_completed") boolean completed,
-            @JsonProperty("events") RoadmapEventResponse events
+            @JsonProperty("task_date") LocalDate taskDate
     ) {
     }
 

@@ -41,7 +41,7 @@ public class SessionService {
                 .build();
         StudySession saved = studySessionRepository.save(session);
         return new SessionResponse(saved.getId(), saved.getCourseId(), saved.getLinkedTaskId(),
-                saved.getStartedAt(), null, null, null);
+                saved.getStartedAt(), null, null, null, null);
     }
 
     @Transactional
@@ -54,6 +54,7 @@ public class SessionService {
         session.setEndedAt(endedAt);
         session.setDurationMinutesLogged(minutes);
         session.setTaskCompleted(request.taskCompleted());
+        session.setCompletionTime(request.completionTime());
 
         AlertResponse alert = null;
         if (Boolean.TRUE.equals(request.taskCompleted()) && session.getLinkedTaskId() != null) {
@@ -64,6 +65,6 @@ public class SessionService {
         }
 
         return new SessionResponse(session.getId(), session.getCourseId(), session.getLinkedTaskId(),
-                session.getStartedAt(), minutes, request.taskCompleted(), alert);
+                session.getStartedAt(), minutes, request.taskCompleted(), request.completionTime(), alert);
     }
 }

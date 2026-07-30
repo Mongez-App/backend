@@ -11,8 +11,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.slf4j.Logger;
 
 @RestControllerAdvice
@@ -20,6 +22,30 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiErrorResponse> handleResponseStatus(ResponseStatusException ex) {
+        log.warn("ResponseStatusException: {} - {}", String.valueOf(ex.getStatusCode().value()), ex.getReason());
+        ApiErrorResponse error = new ApiErrorResponse(
+                false,
+                String.valueOf(ex.getStatusCode().value()),
+                ex.getReason(),
+                null
+        );
+        return new ResponseEntity<>(error, ex.getStatusCode());
+    }
+
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingHeader(MissingRequestHeaderException ex) {
+        log.warn("MissingRequestHeaderException: {}", ex.getHeaderName());
+        ApiErrorResponse error = new ApiErrorResponse(
+                false,
+                "Bad Request",
+                ex.getHeaderName() + " header is required.",
+                null
+        );
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiErrorResponse> handleUnauthorized(UnauthorizedException ex) {
         log.warn("UnauthorizedException: {}", ex.getMessage());

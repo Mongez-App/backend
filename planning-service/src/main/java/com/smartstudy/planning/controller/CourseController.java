@@ -9,6 +9,7 @@ import com.smartstudy.planning.dto.request.CreateEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.service.EventService;
 import com.smartstudy.planning.service.TaskService;
+import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class CourseController {
     @GetMapping
     public List<CourseResponse> getCourses(@RequestHeader("X-User-Id") String userId) {
         log.info("Incoming request: GET /courses | userId: {}", userId);
+        validateUserId(userId);
         return courseService.getCourses(userId);
     }
 
@@ -44,6 +46,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
         log.info("Incoming request: GET /courses/{} | userId: {}", courseId, userId);
+        validateUserId(userId);
         return courseService.getCourse(userId, courseId);
     }
 
@@ -51,9 +54,11 @@ public class CourseController {
     @ResponseStatus(HttpStatus.CREATED)
     public CourseResponse createCourse(
             @RequestHeader("X-User-Id") String userId,
-            @Valid @RequestBody CreateCourseRequest request) {
+            @Valid @RequestBody CreateCourseRequest request,
+            @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes) {
         log.info("Incoming request: POST /courses | userId: {}", userId);
-        return courseService.createCourse(userId, request);
+        validateUserId(userId);
+        return courseService.createCourse(userId, request, dailyStudyMinutes);
     }
 
     @PatchMapping("/{courseId}")
@@ -62,6 +67,7 @@ public class CourseController {
             @PathVariable UUID courseId,
             @Valid @RequestBody UpdateCourseRequest request) {
         log.info("Incoming request: PATCH /courses/{} | userId: {}", courseId, userId);
+        validateUserId(userId);
         return courseService.updateCourse(userId, courseId, request);
     }
 
@@ -70,6 +76,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
         log.info("Incoming request: DELETE /courses/{} | userId: {}", courseId, userId);
+        validateUserId(userId);
         return courseService.deleteCourse(userId, courseId);
     }
 
@@ -78,6 +85,7 @@ public class CourseController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
         log.info("Incoming request: GET /courses/{}/materials | userId: {}", courseId, userId);
+        validateUserId(userId);
         return courseService.getMaterials(userId, courseId);
     }
 
@@ -87,6 +95,7 @@ public class CourseController {
             @PathVariable UUID courseId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.info("Incoming request: GET /courses/{}/tasks | userId: {} | date: {}", courseId, userId, date);
+        validateUserId(userId);
         return taskService.getTasksByCourse(userId, courseId, date);
     }
 
@@ -99,6 +108,7 @@ public class CourseController {
             @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes,
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         log.info("Incoming request: POST /courses/{}/materials | userId: {}", courseId, userId);
+        validateUserId(userId);
         return courseService.createMaterial(userId, courseId, file, dailyStudyMinutes, preferredDays);
     }
 
@@ -108,6 +118,7 @@ public class CourseController {
             @PathVariable UUID courseId,
             @PathVariable UUID materialId) {
         log.info("Incoming request: DELETE /courses/{}/materials/{} | userId: {}", courseId, materialId, userId);
+        validateUserId(userId);
         return courseService.deleteMaterial(userId, courseId, materialId);
     }
 
@@ -118,6 +129,13 @@ public class CourseController {
             @PathVariable UUID courseId,
             @Valid @RequestBody CreateEventRequest request) {
         log.info("Incoming request: POST /courses/{}/events | userId: {}", courseId, userId);
+        validateUserId(userId);
         return eventService.createEvent(userId, courseId, request);
+    }
+
+    private void validateUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BadRequestException("MISSING_USER_ID", "X-User-Id header is required.");
+        }
     }
 }

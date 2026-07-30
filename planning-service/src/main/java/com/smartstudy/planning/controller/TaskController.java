@@ -40,6 +40,7 @@ public class TaskController {
             @RequestHeader("X-User-Id") String userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.info("Incoming request: GET /tasks | userId: {}", userId);
+        validateUserId(userId);
         return taskService.getTasks(userId, date != null ? date : LocalDate.now());
     }
 
@@ -49,6 +50,7 @@ public class TaskController {
             @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody CreateTaskRequest request) {
         log.info("Incoming request: POST /tasks | userId: {}", userId);
+        validateUserId(userId);
         return taskService.createTask(userId, request);
     }
 
@@ -58,6 +60,7 @@ public class TaskController {
             @PathVariable UUID taskId,
             @Valid @RequestBody UpdateTaskRequest request) {
         log.info("Incoming request: PATCH /tasks/{} | userId: {}", taskId, userId);
+        validateUserId(userId);
         return taskService.updateTask(userId, taskId, request);
     }
 
@@ -67,6 +70,13 @@ public class TaskController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID taskId) {
         log.info("Incoming request: DELETE /tasks/{} | userId: {}", taskId, userId);
+        validateUserId(userId);
         taskService.deleteTask(userId, taskId);
+    }
+
+    private void validateUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new com.smartstudy.shared.exception.BadRequestException("MISSING_USER_ID", "X-User-Id header is required.");
+        }
     }
 }

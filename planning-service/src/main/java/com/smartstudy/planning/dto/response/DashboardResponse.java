@@ -49,8 +49,10 @@ public record DashboardResponse(
             @JsonProperty("deadline_id") UUID deadlineId,
             @JsonProperty("title") String title,
             @JsonProperty("course_name") String courseName,
+            @JsonProperty("event_type") String eventType,
             @JsonProperty("due_text") String dueText,
-            @JsonProperty("due_date") Instant dueDate
+            @JsonProperty("due_date") Instant dueDate,
+            @JsonProperty("days_left") Long daysLeft
     ) {
     }
 

@@ -49,6 +49,8 @@ public class StudySession {
 
     private Boolean taskCompleted;
 
+    private Instant completionTime;
+
     @PrePersist
     void onCreate() {
         startedAt = Instant.now();

@@ -4,8 +4,10 @@ import com.smartstudy.planning.dto.response.DashboardResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
+import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.StudySessionRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import java.util.Comparator;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -16,7 +18,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class DashboardService {
     private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
     private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
+    private final EventRepository eventRepository;
     private final StudySessionRepository studySessionRepository;
 
     @Transactional(readOnly = true)
@@ -61,12 +66,44 @@ public class DashboardService {
                         task.getDurationMinutes(), task.getPriority(), task.isCompleted()))
                 .toList();
 
-        List<DashboardResponse.DeadlineResponse> deadlines = courseRepository
-                .findTop5ByUserIdAndExamDateAfterOrderByExamDateAsc(userId, Instant.now())
+        Instant now = Instant.now();
+        Instant limit = now.plus(7, ChronoUnit.DAYS);
+
+        // 1. Course-level deadlines (exams) within the next 7 days
+        List<DashboardResponse.DeadlineResponse> courseDeadlines = courseRepository
+                .findTop5ByUserIdAndExamDateAfterOrderByExamDateAsc(userId, now)
                 .stream()
-                .map(course -> new DashboardResponse.DeadlineResponse(course.getId(), "Exam", course.getName(),
-                        dueText(course.getExamDate()), course.getExamDate()))
+                .filter(course -> !course.getExamDate().isAfter(limit))
+                .map(course -> {
+                    long daysLeft = Duration.between(now, course.getExamDate()).toDays();
+                    return new DashboardResponse.DeadlineResponse(course.getId(), "Exam", course.getName(),
+                            "Exam", dueText(course.getExamDate()), course.getExamDate(), daysLeft);
+                })
                 .toList();
+
+        // 2. Event-based deadlines (assignments, midterms, etc.) within the next 7 days
+        List<DashboardResponse.DeadlineResponse> eventDeadlines = eventRepository
+                .findByUserIdAndTaskIdIsNullAndStartDateBetween(userId, now, limit)
+                .stream()
+                .map(event -> {
+                    String courseName = null;
+                    if (event.getCourseId() != null) {
+                        courseName = courseRepository.findByIdAndUserId(event.getCourseId(), userId)
+                                .map(c -> c.getName()).orElse(null);
+                    }
+                    long daysLeft = Duration.between(now, event.getStartDate()).toDays();
+                    return new DashboardResponse.DeadlineResponse(event.getId(), event.getTitle(), courseName,
+                            event.getEventType(), dueText(event.getStartDate()), event.getStartDate(), daysLeft);
+                })
+                .toList();
+
+        // Combine, sort by date, and limit to top 5 upcoming items
+        List<DashboardResponse.DeadlineResponse> deadlines =
+                Stream.concat(courseDeadlines.stream(), eventDeadlines.stream())
+                        .sorted(Comparator.comparing(DashboardResponse.DeadlineResponse::dueDate))
+                        .limit(5)
+                        .toList();
+
 
         return new DashboardResponse(
                 "Good day",
@@ -76,6 +113,41 @@ public class DashboardService {
                 deadlines,
                 new DashboardResponse.StreakResponse(todayCompleted > 0 ? 1 : 0),
                 new DashboardResponse.AiSuggestionResponse("Keep your highest priority task first today."));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DashboardResponse.DeadlineResponse> getAllUpcomingDeadlines(String userId) {
+        Instant now = Instant.now();
+        Instant limit = now.plus(365, ChronoUnit.DAYS); // show all upcoming within a year by default
+
+        List<DashboardResponse.DeadlineResponse> courseDeadlines = courseRepository
+                .findTop5ByUserIdAndExamDateAfterOrderByExamDateAsc(userId, now)
+                .stream()
+                .map(course -> {
+                    long daysLeft = Duration.between(now, course.getExamDate()).toDays();
+                    return new DashboardResponse.DeadlineResponse(course.getId(), "Exam", course.getName(),
+                            "Exam", dueText(course.getExamDate()), course.getExamDate(), daysLeft);
+                })
+                .toList();
+
+        List<DashboardResponse.DeadlineResponse> eventDeadlines = eventRepository
+                .findByUserIdAndTaskIdIsNullAndStartDateBetween(userId, now, limit)
+                .stream()
+                .map(event -> {
+                    String courseName = null;
+                    if (event.getCourseId() != null) {
+                        courseName = courseRepository.findByIdAndUserId(event.getCourseId(), userId)
+                                .map(c -> c.getName()).orElse(null);
+                    }
+                    long daysLeft = Duration.between(now, event.getStartDate()).toDays();
+                    return new DashboardResponse.DeadlineResponse(event.getId(), event.getTitle(), courseName,
+                            event.getEventType(), dueText(event.getStartDate()), event.getStartDate(), daysLeft);
+                })
+                .toList();
+
+        return Stream.concat(courseDeadlines.stream(), eventDeadlines.stream())
+                .sorted(Comparator.comparing(DashboardResponse.DeadlineResponse::dueDate))
+                .toList();
     }
 
     private long loggedHours(String userId, LocalDate start, LocalDate end) {

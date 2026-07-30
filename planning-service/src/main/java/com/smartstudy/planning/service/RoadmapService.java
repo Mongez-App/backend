@@ -15,14 +15,18 @@ import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -57,7 +61,15 @@ public class RoadmapService {
         List<Task> allTasks = taskRepository
                 .findByUserIdAndScheduledDateBetweenOrderByScheduledDateAscCreatedAtAsc(userId, startDate, maxEndDate);
 
-        if (allTasks.isEmpty()) {
+        // Fetch only user-created events (taskId IS NULL) over the same window
+        // AI-generated events (taskId != null) are internal scheduling artifacts and not shown
+        List<Event> userEvents = eventRepository.findByUserIdAndTaskIdIsNullAndStartDateBetween(
+                userId,
+                startDate.atStartOfDay().toInstant(ZoneOffset.UTC),
+                maxEndDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+        );
+
+        if (allTasks.isEmpty() && userEvents.isEmpty()) {
             // Return empty response with a single week
             LocalDate endDate = startDate.plusDays(6);
             RoadmapResponse.WeekResponse emptyWeek = new RoadmapResponse.WeekResponse(
@@ -65,25 +77,25 @@ public class RoadmapService {
             return new RoadmapResponse(startDate, List.of(emptyWeek), alert);
         }
 
-        // Determine the actual date range from tasks
-        LocalDate lastTaskDate = allTasks.stream()
-                .map(Task::getScheduledDate)
-                .max(Comparator.naturalOrder())
-                .orElse(startDate.plusDays(6));
-        LocalDate rangeEndDate = weekEnd(lastTaskDate);
+        // Determine the actual date range from whichever runs later: tasks or events
+        LocalDate lastDate = startDate;
+        for (Task task : allTasks) {
+            if (task.getScheduledDate().isAfter(lastDate)) {
+                lastDate = task.getScheduledDate();
+            }
+        }
+        for (Event event : userEvents) {
+            LocalDate eventDate = toLocalDate(event);
+            if (eventDate.isAfter(lastDate)) {
+                lastDate = eventDate;
+            }
+        }
+        LocalDate rangeEndDate = weekEnd(lastDate);
 
         // Fetch courses for name lookups
         Map<UUID, Course> courses = courseRepository.findByUserIdOrderByCreatedAtAsc(userId)
                 .stream()
                 .collect(Collectors.toMap(Course::getId, Function.identity()));
-
-        // Fetch only user-created events (taskId IS NULL) spanning the full range
-        // AI-generated events (taskId != null) are internal scheduling artifacts and not shown
-        List<Event> userEvents = eventRepository.findByUserIdAndTaskIdIsNullAndStartDateBetween(
-                userId,
-                startDate.atStartOfDay().toInstant(ZoneOffset.UTC),
-                rangeEndDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
-        );
 
         // Group tasks by week number
         long totalWeeks = ChronoUnit.WEEKS.between(startDate, rangeEndDate) + 1;
@@ -101,42 +113,38 @@ public class RoadmapService {
                     .sorted(Comparator.comparing(Task::getScheduledDate)
                             .thenComparing(Task::getCreatedAt))
                     .toList();
-            
+
             // 2. Get events for this week
             List<Event> weekEvents = userEvents.stream()
                     .filter(e -> {
-                        LocalDate eventDate = e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate();
+                        LocalDate eventDate = toLocalDate(e);
                         return !eventDate.isBefore(weekStartDate) && !eventDate.isAfter(weekEndDate);
                     })
+                    .sorted(Comparator.comparing(Event::getStartDate))
                     .toList();
 
-            List<RoadmapResponse.StudyBlockResponse> studyBlocks = new ArrayList<>();
-            List<Event> matchedEvents = new ArrayList<>();
-
-            // 3. Create study blocks from tasks, attaching events if they match
+            // 3. One study block per course per week, holding that course's tasks and events.
+            //    Course order follows first task occurrence, then course-only events.
+            Map<UUID, List<Task>> tasksByCourse = new LinkedHashMap<>();
             for (Task task : weekTasks) {
-                Event matchedEvent = null;
-                if (task.getCourseId() != null) {
-                    matchedEvent = weekEvents.stream()
-                            .filter(e -> !matchedEvents.contains(e)) // Don't match the same event twice
-                            .filter(e -> task.getCourseId().equals(e.getCourseId()))
-                            .filter(e -> e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate().equals(task.getScheduledDate()))
-                            .findFirst()
-                            .orElse(null);
-                }
-                
-                if (matchedEvent != null) {
-                    matchedEvents.add(matchedEvent);
-                }
-                
-                studyBlocks.add(toStudyBlockResponse(task, courses, matchedEvent));
+                tasksByCourse.computeIfAbsent(task.getCourseId(), k -> new ArrayList<>()).add(task);
+            }
+            Map<UUID, List<Event>> eventsByCourse = new LinkedHashMap<>();
+            for (Event event : weekEvents) {
+                eventsByCourse.computeIfAbsent(event.getCourseId(), k -> new ArrayList<>()).add(event);
             }
 
-            // 4. Create standalone study blocks for any unmatched events
-            for (Event event : weekEvents) {
-                if (!matchedEvents.contains(event)) {
-                    studyBlocks.add(toStandaloneEventBlock(event, courses));
-                }
+            Set<UUID> courseOrder = new LinkedHashSet<>(tasksByCourse.keySet());
+            courseOrder.addAll(eventsByCourse.keySet());
+
+            List<RoadmapResponse.StudyBlockResponse> studyBlocks = new ArrayList<>();
+            for (UUID courseId : courseOrder) {
+                studyBlocks.add(toStudyBlockResponse(
+                        courseId,
+                        weekStartDate,
+                        tasksByCourse.getOrDefault(courseId, List.of()),
+                        eventsByCourse.getOrDefault(courseId, List.of()),
+                        courses));
             }
 
             weeks.add(new RoadmapResponse.WeekResponse(weekNumber, weekStartDate, weekEndDate, studyBlocks));
@@ -146,63 +154,56 @@ public class RoadmapService {
     }
 
     private RoadmapResponse.StudyBlockResponse toStudyBlockResponse(
-            Task task, Map<UUID, Course> courses, Event matchedEvent) {
+            UUID courseId,
+            LocalDate weekStartDate,
+            List<Task> blockTasks,
+            List<Event> blockEvents,
+            Map<UUID, Course> courses) {
 
-        Course course = task.getCourseId() != null ? courses.get(task.getCourseId()) : null;
+        Course course = courseId != null ? courses.get(courseId) : null;
         String courseName = course != null ? course.getName() : "Unknown Course";
 
-        RoadmapResponse.RoadmapEventResponse eventResponse = null;
-        if (matchedEvent != null) {
-            String eventCourseName = matchedEvent.getCourseId() != null
-                    ? courses.getOrDefault(matchedEvent.getCourseId(), course) != null
-                        ? courses.getOrDefault(matchedEvent.getCourseId(), course).getName()
-                        : courseName
-                    : courseName;
-            eventResponse = new RoadmapResponse.RoadmapEventResponse(
-                    matchedEvent.getId().toString(),
-                    matchedEvent.getCourseId(),
-                    eventCourseName,
-                    matchedEvent.getTitle(),
-                    matchedEvent.getEventType(),
-                    matchedEvent.getStartDate().toString()
-            );
-        }
+        List<RoadmapResponse.RoadmapTaskResponse> tasks = blockTasks.stream()
+                .map(task -> new RoadmapResponse.RoadmapTaskResponse(
+                        task.getTitle(),
+                        task.getDurationMinutes(),
+                        task.getScheduledDate()))
+                .toList();
+
+        List<RoadmapResponse.RoadmapEventResponse> events = blockEvents.stream()
+                .map(event -> new RoadmapResponse.RoadmapEventResponse(
+                        event.getId().toString(),
+                        event.getCourseId(),
+                        courseName,
+                        event.getTitle(),
+                        event.getEventType(),
+                        event.getStartDate().toString()))
+                .toList();
+
+        // A block is complete once every task in it is done AND all related events' dates have passed.
+        boolean tasksCompleted = !blockTasks.isEmpty() && blockTasks.stream().allMatch(Task::isCompleted);
+        LocalDate today = LocalDate.now();
+        boolean eventsPassed = blockEvents.stream().allMatch(e -> !toLocalDate(e).isAfter(today));
+        boolean completed = tasksCompleted && eventsPassed;
 
         return new RoadmapResponse.StudyBlockResponse(
-                task.getId(),
-                task.getCourseId(),
+                blockId(courseId, weekStartDate),
+                courseId,
                 courseName,
-                task.getTitle(),
-                task.getDurationMinutes(),
-                task.isCompleted(),
-                eventResponse
+                tasks,
+                completed,
+                events
         );
     }
 
-    private RoadmapResponse.StudyBlockResponse toStandaloneEventBlock(
-            Event event, Map<UUID, Course> courses) {
-            
-        Course course = event.getCourseId() != null ? courses.get(event.getCourseId()) : null;
-        String courseName = course != null ? course.getName() : "Unknown Course";
+    /** Stable, derived block id: same course in the same week always yields the same value. */
+    private UUID blockId(UUID courseId, LocalDate weekStartDate) {
+        return UUID.nameUUIDFromBytes(
+                ("block:" + courseId + ":" + weekStartDate).getBytes(StandardCharsets.UTF_8));
+    }
 
-        RoadmapResponse.RoadmapEventResponse eventResponse = new RoadmapResponse.RoadmapEventResponse(
-                event.getId().toString(),
-                event.getCourseId(),
-                courseName,
-                event.getTitle(),
-                event.getEventType(),
-                event.getStartDate().toString()
-        );
-
-        return new RoadmapResponse.StudyBlockResponse(
-                event.getId(), // Use event ID as block ID for standalone events
-                event.getCourseId(),
-                courseName,
-                event.getTitle(), // Use event title as topic
-                90, // 90 minutes duration for standalone events
-                false, 
-                eventResponse
-        );
+    private LocalDate toLocalDate(Event event) {
+        return event.getStartDate().atZone(ZoneOffset.UTC).toLocalDate();
     }
 
     private LocalDate weekStart(LocalDate date) {

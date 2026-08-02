@@ -14,8 +14,8 @@ import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
 import org.springframework.ai.chat.client.ChatClient;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -25,6 +25,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
@@ -40,10 +44,29 @@ public class StudyPlannerAgent {
     private final CourseRepository courseRepository;
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper;
+    private final ConcurrentHashMap<String, Lock> courseLocks = new ConcurrentHashMap<>();
 
     public AgentPlanResult generatePlan(String userId, UUID courseId, UUID materialId,
                                         int dailyStudyMinutes, String preferredDays, boolean isIncremental) {
+        String lockKey = userId + ":" + courseId;
+        Lock lock = courseLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
+        boolean acquired;
         try {
+            acquired = lock.tryLock(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Agent operation interrupted while waiting for lock on course {}", courseId);
+            return new AgentPlanResult("busy", new AlertResponse(
+                    "A schedule operation is already in progress for this course. Please wait and try again."));
+        }
+        if (!acquired) {
+            log.warn("Agent operation for course {} already in progress for user {}", courseId, userId);
+            return new AgentPlanResult("busy", new AlertResponse(
+                    "A schedule operation is already in progress for this course. Please wait and try again."));
+        }
+        try {
+            verifyCourseOwnership(userId, courseId);
+
             String rawText = pdfExtractorTool.extract(materialId.toString());
             List<ExtractedTask> tasks = extractTasksFromText(rawText, materialId);
 
@@ -64,16 +87,31 @@ public class StudyPlannerAgent {
                 log.warn("Over capacity for material {}: {} tasks unscheduled out of {}",
                         materialId, scheduleResult.unscheduledTasks().size(), tasks.size());
                 return new AgentPlanResult("over_capacity", new AlertResponse(
-                        "Some study tasks could not be fitted before your exam date. No changes were made \u2014 consider adding more study days or increasing your daily study time."));
+                        "Some study tasks could not be fitted before your exam date. No changes were made — consider adding more study days or increasing your daily study time."));
             }
 
-            aiSchedulePersistenceService.persist(userId, courseId, materialId, scheduleResult.scheduledParts(), isIncremental);
-            log.info("Plan generated successfully for material {}: {} parts scheduled", materialId, scheduleResult.scheduledParts().size());
-            return new AgentPlanResult("scheduled", new AlertResponse("Study tasks have been scheduled for " + materialId + "."));
+            AiSchedulePersistenceService.PersistResult persistResult = aiSchedulePersistenceService.persist(
+                    userId, courseId, materialId, scheduleResult.scheduledParts(), isIncremental);
+
+            log.info("Plan generated successfully for material {}: {} parts scheduled, {} skipped",
+                    materialId, persistResult.createdCount(), persistResult.skippedCount());
+            return new AgentPlanResult("scheduled", new AlertResponse(
+                    "Study tasks have been scheduled for " + materialId + "."),
+                    persistResult.skippedCount(), persistResult.conflictCount());
+        } catch (ResponseStatusException ex) {
+            throw ex;
         } catch (Exception ex) {
             log.error("Failed to generate plan for material {}: {}", materialId, ex.getMessage(), ex);
             return new AgentPlanResult("error", new AlertResponse("Failed to generate study plan: " + ex.getMessage()));
+        } finally {
+            lock.unlock();
         }
+    }
+
+    private void verifyCourseOwnership(String userId, UUID courseId) {
+        courseRepository.findByIdAndUserId(courseId, userId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN, "COURSE_NOT_OWNED"));
     }
 
     private void assignPriorities(List<ExtractedTask> tasks, UUID materialId, LocalDate examDate) {
@@ -112,46 +150,74 @@ public class StudyPlannerAgent {
             }
 
             int totalRescheduled = 0;
+            int totalSkipped = 0;
+            int totalConflicts = 0;
 
             for (Course course : courses) {
-                MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, course.getId());
-
-                if (summary.missedCount() == 0 || !summary.requiresFullReschedule()) {
-                    continue;
+                String lockKey = userId + ":" + course.getId();
+                Lock lock = courseLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
+                boolean acquired;
+                try {
+                    acquired = lock.tryLock(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Agent operation interrupted while waiting for lock on course {}", course.getId());
+                    return new AgentCheckResult("busy", new AlertResponse(
+                            "A schedule operation is already in progress for this course. Please wait and try again."));
                 }
-
-                log.info("Performing full reschedule for course {} ({} missed tasks)", course.getId(), summary.missedCount());
-                aiSchedulePersistenceService.fullReschedule(userId, course.getId());
-
-                List<ExtractedTask> remainingTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, course.getId())
-                        .stream()
-                        .sorted(Comparator
-                                .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
-                                .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
-                        .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
-                                t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null, t.getPriority()))
-                        .toList();
-
-                List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
-                        userId, course.getId().toString(), dailyStudyMinutes, preferredDays);
-
-                ScheduleResult scheduleResult = schedulerEngineTool.schedule(remainingTasks, slots);
-
-                if (scheduleResult.overCapacity()) {
-                    log.warn("Over capacity after reschedule for course {}: {} unscheduled", course.getId(), scheduleResult.unscheduledTasks().size());
-                    continue;
+                if (!acquired) {
+                    log.warn("Agent operation for course {} already in progress for user {}", course.getId(), userId);
+                    return new AgentCheckResult("busy", new AlertResponse(
+                            "A schedule operation is already in progress for this course. Please wait and try again."));
                 }
+                try {
+                    verifyCourseOwnership(userId, course.getId());
 
-                aiSchedulePersistenceService.persist(userId, course.getId(), null, scheduleResult.scheduledParts(), false);
-                totalRescheduled += summary.missedCount();
+                    MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, course.getId());
+
+                    if (summary.missedCount() == 0 || !summary.requiresFullReschedule()) {
+                        continue;
+                    }
+
+                    log.info("Performing full reschedule for course {} ({} missed tasks)", course.getId(), summary.missedCount());
+                    aiSchedulePersistenceService.fullReschedule(userId, course.getId());
+
+                    List<ExtractedTask> remainingTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, course.getId())
+                            .stream()
+                            .sorted(Comparator
+                                    .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
+                                    .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
+                            .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
+                                    t.getSequenceOrder() != null ? t.getSequenceOrder() : 0, null, t.getPriority()))
+                            .toList();
+
+                    List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
+                            userId, course.getId().toString(), dailyStudyMinutes, preferredDays);
+
+                    ScheduleResult scheduleResult = schedulerEngineTool.schedule(remainingTasks, slots);
+
+                    if (scheduleResult.overCapacity()) {
+                        log.warn("Over capacity after reschedule for course {}: {} unscheduled", course.getId(), scheduleResult.unscheduledTasks().size());
+                        continue;
+                    }
+
+                    AiSchedulePersistenceService.PersistResult persistResult = aiSchedulePersistenceService.persist(
+                            userId, course.getId(), null, scheduleResult.scheduledParts(), false);
+                    totalRescheduled += summary.missedCount();
+                    totalSkipped += persistResult.skippedCount();
+                    totalConflicts += persistResult.conflictCount();
+                } finally {
+                    lock.unlock();
+                }
             }
 
             if (totalRescheduled > 0) {
                 return new AgentCheckResult("rescheduled", new AlertResponse(
-                        totalRescheduled + " missed tasks were rescheduled across your roadmap."));
+                        totalRescheduled + " missed tasks were rescheduled across your roadmap."),
+                        totalSkipped, totalConflicts);
             }
 
-            return new AgentCheckResult("ok", null);
+            return new AgentCheckResult("ok", null, totalSkipped, totalConflicts);
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -202,4 +268,3 @@ public class StudyPlannerAgent {
         }
     }
 }
-

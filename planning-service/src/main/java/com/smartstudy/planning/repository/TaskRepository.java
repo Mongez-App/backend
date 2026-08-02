@@ -53,4 +53,13 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     List<Task> findByUserIdAndScheduledDateBetweenOrderByScheduledDateAscCreatedAtAsc(
             String userId, LocalDate startDate, LocalDate endDate);
+
+    List<Task> findByUserIdAndCourseIdAndScheduledDateBetweenAndCompletedTrue(
+            String userId, UUID courseId, LocalDate startDate, LocalDate endDate);
+
+    List<Task> findByUserIdAndCourseIdAndScheduledDateBetweenAndMissedTrue(
+            String userId, UUID courseId, LocalDate startDate, LocalDate endDate);
+
+    List<Task> findByUserIdAndCourseIdAndMaterialIdAndScheduledDateBetween(
+            String userId, UUID courseId, UUID materialId, LocalDate startDate, LocalDate endDate);
 }

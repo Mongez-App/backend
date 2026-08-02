@@ -39,6 +39,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
         }
 
         String path = exchange.getRequest().getURI().getPath();
+
         if (shouldSkipFilter(exchange, path)) {
             return chain.filter(exchange);
         }
@@ -53,26 +54,41 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
         try {
             FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(token);
             String userId = firebaseToken.getUid();
-            log.info("Firebase token verified for user: {} on path: {}", userId, exchange.getRequest().getURI().getPath());
+            log.info("Firebase token verified for user: {} on path: {}", userId, path);
 
+            // Build the mutated request:
+            // 1. Remove any client-supplied X-User-Id (prevent spoofing)
+            // 2. Inject the trusted X-User-Id from the verified Firebase token
+            // 3. Remove the Authorization header before forwarding (defense in depth)
+            //    Downstream services should never see the raw Firebase token.
             ServerWebExchange mutatedExchange = exchange.mutate()
                     .request(exchange.getRequest().mutate()
+                            .headers(httpHeaders -> {
+                                httpHeaders.remove("X-User-Id");
+                                httpHeaders.remove("Authorization");
+                            })
                             .header("X-User-Id", userId)
                             .build())
                     .build();
 
             return chain.filter(mutatedExchange);
         } catch (FirebaseAuthException e) {
-            log.warn("Invalid Firebase token for path: {}", exchange.getRequest().getURI().getPath());
+            log.warn("Invalid Firebase token for path: {}", path);
             return writeUnauthorizedResponse(exchange, "Invalid or expired Firebase token");
         }
     }
 
     private boolean shouldSkipFilter(ServerWebExchange exchange, String path) {
-        if (path.startsWith("/auth")) {
+        // Handshake does its own token validation inside the service
+        if (path.startsWith("/api/v1/auth/handshake")) {
             return true;
         }
-        if ("POST".equalsIgnoreCase(exchange.getRequest().getMethod().name()) && "/users".equals(path)) {
+        // POST /api/v1/users is a public endpoint for creating users
+        if ("POST".equalsIgnoreCase(exchange.getRequest().getMethod().name()) && "/api/v1/users".equals(path)) {
+            return true;
+        }
+        // Actuator and swagger
+        if (path.startsWith("/actuator") || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
             return true;
         }
         return false;

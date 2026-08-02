@@ -31,8 +31,10 @@ public class TaskService {
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasks(String userId, LocalDate date) {
         log.info("Fetching tasks for userId: {} | date: {}", userId, date);
-        return taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
-                .stream()
+        List<Task> tasks = date != null
+                ? taskRepository.findByUserIdAndScheduledDateOrderByCreatedAtAsc(userId, date)
+                : taskRepository.findByUserIdOrderByCreatedAtAsc(userId);
+        return tasks.stream()
                 .map(taskMapper::toResponse)
                 .toList();
     }

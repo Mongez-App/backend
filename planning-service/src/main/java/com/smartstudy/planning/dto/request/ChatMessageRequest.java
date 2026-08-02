@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Inbound WebSocket/REST payload for sending a chat message.
+ * Inbound REST payload for sending a chat message.
  */
 public record ChatMessageRequest(
     @NotBlank(message = "Message must not be empty")

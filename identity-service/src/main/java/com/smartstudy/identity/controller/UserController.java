@@ -55,6 +55,13 @@ public class UserController {
         return ResponseEntity.ok(userService.updateProfile(uid, request));
     }
 
+    @GetMapping("/me/preferences")
+    public ResponseEntity<com.smartstudy.identity.dto.response.PreferencesData> getPreferences() {
+        log.info("Incoming request: GET /users/me/preferences");
+        String uid = getFirebaseUid();
+        return ResponseEntity.ok(userService.getPreferences(uid));
+    }
+
     @PutMapping("/me/preferences")
     public ResponseEntity<com.smartstudy.identity.dto.response.PreferencesResponse> savePreferences(
             @Valid @RequestBody com.smartstudy.identity.dto.request.SavePreferencesRequest request) {

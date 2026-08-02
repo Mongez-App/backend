@@ -1,9 +1,13 @@
 package com.smartstudy.planning.config;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "gemini")
 public record GeminiProperties(
+        @NotBlank(message = "gemini.api-key must not be blank. Set the GEMINI_API_KEY environment variable.")
         String apiKey,
         EmbeddingConfig embedding,
         VisionConfig vision,
@@ -11,7 +15,7 @@ public record GeminiProperties(
 ) {
     public record EmbeddingConfig(String model, int batchSize) {
         public EmbeddingConfig {
-            if (model == null) model = "text-embedding-004";
+            if (model == null) model = "gemini-embedding-001";
             if (batchSize <= 0) batchSize = 100;
         }
     }
@@ -30,3 +34,4 @@ public record GeminiProperties(
         }
     }
 }
+

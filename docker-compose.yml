@@ -84,8 +84,9 @@ services:
       context: .
       dockerfile: planning-service/Dockerfile
     container_name: smartstudy-planning-service
-    ports:
-      - "8082:8082"
+    # No ports exposed externally — Planning Service is only accessible
+    # via internal Docker network. All external traffic must go through
+    # API Gateway (port 8080). This prevents X-User-Id spoofing.
     volumes:
       - material_uploads:/app/uploads/materials
     environment:

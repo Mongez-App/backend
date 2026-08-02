@@ -102,7 +102,8 @@ public class EmbeddingService {
                 .map(text -> Map.<String, Object>of(
                         "model", modelPath,
                         "content", Map.of("parts", List.of(Map.of("text", text))),
-                        "taskType", taskType
+                        "taskType", taskType,
+                        "outputDimensionality", 768
                 ))
                 .toList();
 

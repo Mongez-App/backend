@@ -40,7 +40,7 @@ public class TaskController {
             @RequestHeader("X-User-Id") String userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.info("Incoming request: GET /tasks | userId: {}", userId);
-        return taskService.getTasks(userId, date != null ? date : LocalDate.now());
+        return taskService.getTasks(userId, date);
     }
 
     @PostMapping

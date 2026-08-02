@@ -37,7 +37,7 @@ import java.util.UUID;
 
 /**
  * Central orchestrator for the entire chat flow.
- * Single entry point called by both the WebSocket handler and the REST controller.
+ * Single entry point called by the REST ChatController.
  */
 @Service
 public class ChatService {

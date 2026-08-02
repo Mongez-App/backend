@@ -79,6 +79,7 @@ services:
       context: .
       dockerfile: planning-service/Dockerfile
     container_name: smartstudy-planning-service
+    # No ports exposed — only reachable via internal Docker network through API Gateway.
     volumes:
       - material_uploads:/app/uploads/materials
     environment:

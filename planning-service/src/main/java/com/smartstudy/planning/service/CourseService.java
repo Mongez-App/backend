@@ -11,6 +11,7 @@ import com.smartstudy.planning.dto.scraper.ScraperImportResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.CourseType;
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.model.Task;
@@ -36,10 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -59,7 +57,7 @@ public class CourseService {
     private final TaskRepository taskRepository;
     private final StudyPlannerAgent studyPlannerAgent;
     private final RestTemplateBuilder restTemplateBuilder;
-    private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
+    private final FileStorageService fileStorageService;
 
     @Value("${smartstudy.url-course.min-split-minutes:1}")
     private int minSplitMinutes;
@@ -272,21 +270,19 @@ public class CourseService {
                 .name(file.getName())
                 .contentType(file.getContentType())
                 .fileSizeBytes(file.getSize())
-                .status("pending")
+                .status(MaterialStatus.PENDING)
                 .build();
         Material saved = materialRepository.save(material);
 
         try {
-            Files.createDirectories(MATERIAL_UPLOAD_DIR);
-            Path uploadPath = MATERIAL_UPLOAD_DIR.resolve(saved.getId().toString());
-            try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, uploadPath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            String filePath = fileStorageService.save(
+                    userId, courseId, saved.getId(), file.getInputStream());
+            saved.setFilePath(filePath);
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
         }
 
-        saved.setStatus("uploaded");
+        saved.setStatus(MaterialStatus.PROCESSING);
         materialRepository.save(saved);
         triggerAgentForMaterial(userId, courseId, saved.getId(), dailyStudyMinutes, preferredDays);
         return toMaterialResponse(saved);
@@ -297,7 +293,7 @@ public class CourseService {
                                         int dailyStudyMinutes, String preferredDays) {
         Material material = materialRepository.findByIdAndUserId(materialId, userId)
                 .orElseThrow(() -> new IllegalStateException("Material not found for agent: " + materialId));
-        material.setStatus("processing");
+        material.setStatus(MaterialStatus.PROCESSING);
         materialRepository.save(material);
 
         try {
@@ -305,16 +301,18 @@ public class CourseService {
             AgentPlanResult result = studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
 
             if ("error".equals(result.status())) {
-                material.setStatus("failed");
+                material.setStatus(MaterialStatus.FAILED);
                 log.error("Agent failed for material {}: {}", materialId, result.alert().message());
             } else {
-                material.setStatus("completed");
+                material.setStatus(MaterialStatus.READY);
+                material.setProcessedAt(Instant.now());
                 log.info("Agent completed for material {}: status={}", materialId, result.status());
             }
             materialRepository.save(material);
         } catch (Exception ex) {
             log.error("Unexpected exception during agent processing for material {}: {}", materialId, ex.getMessage(), ex);
-            material.setStatus("failed");
+            material.setStatus(MaterialStatus.FAILED);
+            material.setErrorMessage(ex.getMessage());
             materialRepository.save(material);
         }
     }
@@ -323,6 +321,8 @@ public class CourseService {
     public StatusResponse deleteMaterial(String userId, UUID courseId, UUID materialId) {
         log.info("Deleting material {} from course {} | userId: {}", materialId, courseId, userId);
         getOwnedCourse(userId, courseId);
+        // Delete file from disk
+        fileStorageService.delete(userId, courseId, materialId);
         materialRepository.deleteByIdAndCourseIdAndUserId(materialId, courseId, userId);
         return new StatusResponse("success",
                 new AlertResponse("Study blocks linked to this material were removed from your roadmap."));
@@ -351,8 +351,15 @@ public class CourseService {
 
     private MaterialResponse toMaterialResponse(Material material) {
         double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
-        return new MaterialResponse(material.getId(), material.getName(), sizeMb,
-                material.getStatus(), material.getUploadedAt());
+        return new MaterialResponse(
+                material.getId(),
+                material.getName(),
+                material.getPageCount(),
+                sizeMb,
+                material.getStatus().name().toLowerCase(),
+                material.getUploadedAt(),
+                material.getProcessedAt(),
+                material.getErrorMessage());
     }
 
     private double completionPercentage(String userId, UUID courseId) {

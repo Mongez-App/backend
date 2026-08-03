@@ -3,8 +3,8 @@ spring:
     name: planning-service
   servlet:
     multipart:
-      max-file-size: 25MB
-      max-request-size: 25MB
+      max-file-size: 50MB
+      max-request-size: 50MB
   ai:
     google:
       genai:
@@ -13,6 +13,10 @@ spring:
           options:
             model: gemini-3.1-flash-lite
             temperature: 0.2
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${PLANNING_DB_NAME:planning_db}
+    username: ${POSTGRES_USER:smartstudy}
+    password: ${POSTGRES_PASSWORD:smartstudy}
   jpa:
     open-in-view: false
 
@@ -20,12 +24,15 @@ server:
   port: ${PORT:8082}
   address: 0.0.0.0
   tomcat:
-    max-http-form-post-size: 25MB
+    max-http-form-post-size: 50MB
 
 eureka:
   client:
     register-with-eureka: true
     fetch-registry: true
+  instance:
+    prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:planning-service.railway.internal}
 
 management:
   endpoints:
@@ -40,3 +47,37 @@ smartstudy:
   url-course:
     min-split-minutes: 1
     max-split-minutes: 60
+
+# --- AI Processing Pipeline ---
+
+gemini:
+  api-key: ${GEMINI_API_KEY}
+  embedding:
+    model: gemini-embedding-001
+    batch-size: 100
+  vision:
+    model: gemini-2.0-flash
+  chat:
+    model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
+    max-output-tokens: 2048
+    temperature: 0.3
+
+storage:
+  materials:
+    base-dir: ${MATERIAL_STORAGE_DIR:uploads/materials}
+
+qdrant:
+  host: ${QDRANT_HOST:localhost}
+  port: ${QDRANT_PORT:6334}
+  collection-name: material_chunks
+
+processing:
+  poll-interval-ms: ${PROCESSING_POLL_INTERVAL:5000}
+  retry-interval-ms: ${PROCESSING_RETRY_INTERVAL:1800000}
+  max-retries: ${PROCESSING_MAX_RETRIES:3}
+
+# --- AI Chat ---
+chat:
+  history-context-size: 20
+  qdrant-search-limit: 5
+  qdrant-score-threshold: 0.5

@@ -37,11 +37,12 @@ public class UserPreference {
     @Builder.Default
     private Integer dailyStudyHours = 0;
 
-    @ElementCollection
+    @ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
     @CollectionTable(name = "user_available_days", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "day_of_week", length = 10, nullable = false)
     @Enumerated(EnumType.STRING)
-    private List<com.smartstudy.identity.enums.WeekDay> availableDays;
+    @Builder.Default
+    private List<com.smartstudy.identity.enums.WeekDay> availableDays = new java.util.ArrayList<>();
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;

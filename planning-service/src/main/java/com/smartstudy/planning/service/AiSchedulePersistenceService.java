@@ -3,6 +3,7 @@ package com.smartstudy.planning.service;
 import com.smartstudy.planning.ai.model.ScheduledPart;
 import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.EventRepository;
@@ -77,7 +78,7 @@ public class AiSchedulePersistenceService {
         if (materialId != null) {
             Material material = materialRepository.findByIdAndUserId(materialId, userId)
                     .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
-            material.setStatus("scheduled");
+            material.setStatus(MaterialStatus.READY);
             materialRepository.save(material);
         }
 

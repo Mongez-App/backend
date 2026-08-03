@@ -60,9 +60,15 @@ public class GlobalExceptionHandler {
         return buildResponse("INVALID_REQUEST", "Malformed request body.", HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        log.error("DataIntegrityViolationException: {}", ex.getMostSpecificCause().getMessage(), ex);
+        return buildResponse("DATA_INTEGRITY_ERROR", "A data constraint was violated. Please check your input.", HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
-        log.error("Unexpected exception: ", ex);
+        log.error("Unexpected {} in identity-service: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         return buildResponse("INTERNAL_SERVER_ERROR", "An unexpected error occurred.", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 

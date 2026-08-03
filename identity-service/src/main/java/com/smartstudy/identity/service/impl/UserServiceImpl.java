@@ -96,6 +96,32 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    public com.smartstudy.identity.dto.response.PreferencesData getPreferences(String firebaseUid) {
+        log.info("Fetching preferences for uid: {}", firebaseUid);
+        if (!userRepository.existsById(firebaseUid)) {
+            throw new NotFoundException("USER_NOT_FOUND", "User not found. Please complete handshake first.");
+        }
+
+        UserPreference preference = userPreferenceRepository.findById(firebaseUid)
+                .orElseGet(() -> {
+                    log.info("No preferences found for uid: {}. Creating default preferences.", firebaseUid);
+                    UserPreference defaultPref = UserPreference.builder()
+                            .userId(firebaseUid)
+                            .dailyStudyHours(0)
+                            .availableDays(new java.util.ArrayList<>())
+                            .updatedAt(java.time.Instant.now())
+                            .build();
+                    return userPreferenceRepository.save(defaultPref);
+                });
+
+        return new com.smartstudy.identity.dto.response.PreferencesData(
+                preference.getDailyStudyHours() != null ? preference.getDailyStudyHours() : 0,
+                preference.getAvailableDays() != null ? preference.getAvailableDays() : java.util.Collections.emptyList()
+        );
+    }
+
+    @Override
+    @Transactional
     public com.smartstudy.identity.dto.response.PreferencesResponse savePreferences(String firebaseUid, com.smartstudy.identity.dto.request.SavePreferencesRequest request) {
         log.info("Saving preferences for uid: {}", firebaseUid);
         if (!userRepository.existsById(firebaseUid)) {
@@ -103,10 +129,24 @@ public class UserServiceImpl implements UserService {
         }
 
         UserPreference preference = userPreferenceRepository.findById(firebaseUid)
-                .orElse(UserPreference.builder().userId(firebaseUid).build());
+                .orElseGet(() -> UserPreference.builder()
+                        .userId(firebaseUid)
+                        .updatedAt(java.time.Instant.now())
+                        .build());
 
         preference.setDailyStudyHours(request.dailyStudyHours());
-        preference.setAvailableDays(request.availableDays());
+
+        List<com.smartstudy.identity.enums.WeekDay> uniqueDays = request.availableDays() != null ?
+                request.availableDays().stream().filter(java.util.Objects::nonNull).distinct().toList() :
+                java.util.Collections.emptyList();
+
+        if (preference.getAvailableDays() == null) {
+            preference.setAvailableDays(new java.util.ArrayList<>(uniqueDays));
+        } else {
+            preference.getAvailableDays().clear();
+            preference.getAvailableDays().addAll(uniqueDays);
+        }
+
         userPreferenceRepository.save(preference);
 
         return new com.smartstudy.identity.dto.response.PreferencesResponse("success", new com.smartstudy.identity.dto.response.PreferencesData(preference.getDailyStudyHours(), preference.getAvailableDays()));

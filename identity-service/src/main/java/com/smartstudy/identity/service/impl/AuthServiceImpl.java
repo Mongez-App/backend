@@ -10,6 +10,7 @@ import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.repository.UserRepository;
 import com.smartstudy.identity.service.AuthService;
 import com.smartstudy.identity.util.FieldMappingUtil;
+import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.exception.NotFoundException;
 import com.smartstudy.shared.exception.UnauthorizedException;
 import com.smartstudy.shared.logging.LoggerFactory;
@@ -38,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
         try {
             firebaseToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
         } catch (FirebaseAuthException e) {
+            log.warn("Handshake: Firebase token verification failed", e);
             throw new UnauthorizedException("INVALID_TOKEN", "Firebase ID token is invalid or expired.");
         }
 
@@ -45,10 +47,20 @@ public class AuthServiceImpl implements AuthService {
         String email = firebaseToken.getEmail();
         String avatarUrl = firebaseToken.getPicture();
 
-        // Request fields are validated as @NotBlank
+        // Map and validate request fields
         String name = request.name();
         String appearance = FieldMappingUtil.appearanceToInternal(request.appearance());
-        String language = request.language();
+        if (appearance == null) {
+            throw new BadRequestException("INVALID_APPEARANCE",
+                    "Appearance must be one of: " + FieldMappingUtil.validAppearanceValues()
+                    + " or their internal equivalents (DARK, LIGHT, SYSTEM).");
+        }
+        String language = FieldMappingUtil.languageToInternal(request.language());
+        if (language == null) {
+            throw new BadRequestException("INVALID_LANGUAGE",
+                    "Language must be one of: " + FieldMappingUtil.validLanguageValues()
+                    + " or their internal equivalents (en, ar).");
+        }
 
         // 1. Primary lookup: find existing user by Firebase UID
         var existingById = userRepository.findById(uid);

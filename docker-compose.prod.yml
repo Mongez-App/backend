@@ -1,0 +1,122 @@
+services:
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: smartstudy-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartstudy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstudy}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartstudy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  eureka:
+    build:
+      context: .
+      dockerfile: eureka/Dockerfile
+    container_name: smartstudy-eureka
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8761}
+      - SERVER_ADDRESS=0.0.0.0
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_ENABLE_SELF_PRESERVATION=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:$${PORT:-8761}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: smartstudy-api-gateway
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8080}
+      - SERVER_ADDRESS=0.0.0.0
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=${EUREKA_INSTANCE_HOSTNAME:-api-gateway}
+      - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
+    depends_on:
+      eureka:
+        condition: service_healthy
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: identity-service/Dockerfile
+    container_name: smartstudy-identity-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8081}
+      - SERVER_ADDRESS=0.0.0.0
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
+      - IDENTITY_DB_NAME=${IDENTITY_DB_NAME:-identity_db}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=${EUREKA_INSTANCE_HOSTNAME:-identity-service}
+      - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+
+  planning-service:
+    build:
+      context: .
+      dockerfile: planning-service/Dockerfile
+    container_name: smartstudy-planning-service
+    # No ports exposed — only reachable via internal Docker network through API Gateway.
+    volumes:
+      - material_uploads:/app/uploads/materials
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=${PORT:-8082}
+      - SERVER_ADDRESS=0.0.0.0
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-smartstudy}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-smartstudy}
+      - PLANNING_DB_NAME=${PLANNING_DB_NAME:-planning_db}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
+      - EUREKA_INSTANCE_HOSTNAME=${EUREKA_INSTANCE_HOSTNAME:-planning-service}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6334
+      - MATERIAL_STORAGE_DIR=/app/uploads/materials
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: smartstudy-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  material_uploads:
+  qdrant_data:

@@ -32,6 +32,7 @@
         <springdoc.version>2.6.0</springdoc.version>
         <firebase-admin.version>9.3.0</firebase-admin.version>
         <spring-ai.version>1.1.8</spring-ai.version>
+        <grpc.version>1.65.1</grpc.version>
         <pdfbox.version>3.0.3</pdfbox.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -50,6 +51,14 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

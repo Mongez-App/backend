@@ -27,9 +27,15 @@ public class AuthController {
     private final AuthService authService;
 
     private String getFirebaseUid() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) {
+            throw new com.smartstudy.shared.exception.UnauthorizedException("INVALID_TOKEN", "Authentication is missing or invalid.");
+        }
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof com.google.firebase.auth.FirebaseToken token) {
             return token.getUid();
+        }
+        if (principal instanceof String uid && !uid.isBlank()) {
+            return uid;
         }
         throw new com.smartstudy.shared.exception.UnauthorizedException("INVALID_TOKEN", "Authentication is missing or invalid.");
     }

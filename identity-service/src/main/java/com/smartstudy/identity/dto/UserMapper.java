@@ -16,6 +16,7 @@ public interface UserMapper {
 
     @Mapping(target = "userId", source = "id")
     @Mapping(target = "appearance", source = "appearance", qualifiedByName = "appearanceToContract")
+    @Mapping(target = "language", source = "language", qualifiedByName = "languageToContract")
     @Mapping(target = "stats", source = "user", qualifiedByName = "toStats")
     HandshakeResponse toHandshakeResponse(User user);
 
@@ -27,6 +28,8 @@ public interface UserMapper {
     @Mapping(target = "language", source = "language", qualifiedByName = "languageToContract")
     ProfileDetailsResponse toProfileDetailsResponse(User user);
 
+    @Mapping(target = "userId", source = "id")
+    @Mapping(target = "isGuest", source = "guest")
     UserResponse toUserResponse(User user);
 
     @Named("appearanceToContract")

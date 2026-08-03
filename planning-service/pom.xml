@@ -74,6 +74,23 @@
             <groupId>com.google.firebase</groupId>
             <artifactId>firebase-admin</artifactId>
         </dependency>
+
+        <!-- Flyway Migration -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Qdrant Vector Database Client -->
+        <dependency>
+            <groupId>io.qdrant</groupId>
+            <artifactId>client</artifactId>
+            <version>1.18.3</version>
+        </dependency>
     </dependencies>
 
     <build>

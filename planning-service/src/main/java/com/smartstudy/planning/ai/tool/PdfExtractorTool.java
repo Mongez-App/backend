@@ -1,6 +1,7 @@
 package com.smartstudy.planning.ai.tool;
 
 import com.smartstudy.planning.model.Material;
+import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -31,8 +32,9 @@ public class PdfExtractorTool {
         Material material = materialRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
 
-        if (!"uploaded".equals(material.getStatus()) && !"processing".equals(material.getStatus())) {
-            throw new IllegalStateException("Material status is " + material.getStatus() + ", expected uploaded or processing");
+        MaterialStatus status = material.getStatus();
+        if (status != MaterialStatus.PROCESSING && status != MaterialStatus.PENDING) {
+            throw new IllegalStateException("Material status is " + status + ", expected PROCESSING or PENDING");
         }
 
         Path filePath = MATERIAL_UPLOAD_DIR.resolve(materialId);

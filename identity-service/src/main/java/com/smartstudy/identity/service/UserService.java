@@ -3,6 +3,7 @@ package com.smartstudy.identity.service;
 import com.smartstudy.identity.dto.request.CreateUserRequest;
 import com.smartstudy.identity.dto.request.SavePreferencesRequest;
 import com.smartstudy.identity.dto.request.UpdateProfileRequest;
+import com.smartstudy.identity.dto.response.PreferencesData;
 import com.smartstudy.identity.dto.response.PreferencesResponse;
 import com.smartstudy.identity.dto.response.ProfileResponse;
 import com.smartstudy.identity.dto.response.UpdateProfileResponse;
@@ -13,6 +14,7 @@ import java.util.List;
 public interface UserService {
     ProfileResponse getProfile(String firebaseUid);
     UpdateProfileResponse updateProfile(String firebaseUid, UpdateProfileRequest request);
+    PreferencesData getPreferences(String firebaseUid);
     PreferencesResponse savePreferences(String firebaseUid, SavePreferencesRequest request);
     void deleteUser(String firebaseUid);
     UserResponse createUser(CreateUserRequest request);

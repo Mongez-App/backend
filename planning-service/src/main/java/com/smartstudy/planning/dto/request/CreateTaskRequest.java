@@ -1,5 +1,7 @@
 package com.smartstudy.planning.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.smartstudy.planning.model.Priority;
 import jakarta.validation.constraints.NotBlank;
@@ -13,7 +15,7 @@ public record CreateTaskRequest(
         @NotBlank @JsonProperty("title") String title,
         @NotNull @Positive @JsonProperty("duration_minutes") Integer durationMinutes,
         @JsonProperty("priority") Priority priority,
-        @JsonProperty("date") LocalDate date,
+        @JsonProperty("scheduled_date") @JsonAlias("date") @JsonFormat(pattern = "yyyy-MM-dd") LocalDate date,
         @JsonProperty("course_id") UUID courseId,
         @JsonProperty("sequence_order") Integer sequenceOrder
 ) {

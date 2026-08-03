@@ -84,8 +84,11 @@ services:
       context: .
       dockerfile: planning-service/Dockerfile
     container_name: smartstudy-planning-service
-    ports:
-      - "8082:8082"
+    # No ports exposed externally — Planning Service is only accessible
+    # via internal Docker network. All external traffic must go through
+    # API Gateway (port 8080). This prevents X-User-Id spoofing.
+    volumes:
+      - material_uploads:/app/uploads/materials
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
       - POSTGRES_HOST=postgres
@@ -96,11 +99,33 @@ services:
       - PLANNING_DB_NAME=${PLANNING_DB_NAME:-planning_db}
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
       - EUREKA_INSTANCE_HOSTNAME=planning-service
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6334
+      - MATERIAL_STORAGE_DIR=/app/uploads/materials
     depends_on:
       postgres:
         condition: service_healthy
       eureka:
         condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: smartstudy-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:
+  material_uploads:
+  qdrant_data:

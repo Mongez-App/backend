@@ -12,5 +12,7 @@ public interface StudySessionRepository extends JpaRepository<StudySession, UUID
 
     Optional<StudySession> findByIdAndUserId(UUID id, String userId);
 
+    List<StudySession> findByUserId(String userId);
+
     List<StudySession> findByUserIdAndEndedAtBetween(String userId, Instant start, Instant end);
 }

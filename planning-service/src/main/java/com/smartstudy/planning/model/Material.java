@@ -2,6 +2,8 @@ package com.smartstudy.planning.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -44,10 +46,25 @@ public class Material {
     @Column(nullable = false)
     private Long fileSizeBytes;
 
-    @Column(nullable = false)
-    private String status;
+    private Integer pageCount;
 
-    @Column(nullable = false, updatable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MaterialStatus status;
+
+    private String filePath;
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
+
+    @Builder.Default
+    private int retryCount = 0;
+
+    private Instant processingStartedAt;
+
+    private Instant processedAt;
+
+    @Column(nullable = false)
     private Instant uploadedAt;
 
     @PrePersist

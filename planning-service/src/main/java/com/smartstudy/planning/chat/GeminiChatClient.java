@@ -43,6 +43,16 @@ public class GeminiChatClient {
     }
 
     /**
+     * Fallback order of models retrieved from Gemini API GET /v1beta/models.
+     */
+    private static final List<String> FALLBACK_MODELS = List.of(
+            "models/gemini-2.5-flash",
+            "models/gemini-2.0-flash",
+            "models/gemini-2.0-flash-lite",
+            "models/gemini-2.5-pro"
+    );
+
+    /**
      * Call Gemini generateContent with the assembled prompt.
      *
      * @param prompt the fully assembled, typed prompt built by PromptBuilder
@@ -50,80 +60,83 @@ public class GeminiChatClient {
      * @throws ChatException if the API call fails or response is unparseable
      */
     public LlmStructuredResponse generate(GeminiPrompt prompt) {
-        String model = geminiProps.chat().model();
-        String url = "/models/" + model + ":generateContent";
+        boolean allQuotaFailures = true;
+        int failedCount = 0;
+        Exception lastException = null;
 
-        try {
-            Map<String, Object> response = geminiRestClient.post()
-                    .uri(url)
-                    .body(prompt)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {});
+        for (String model : FALLBACK_MODELS) {
+            String cleanModel = model.startsWith("models/") ? model : "models/" + model;
+            String url = "/" + cleanModel + ":generateContent";
 
-            // Extract text from response
-            String text = extractTextFromResponse(response);
+            log.info("Trying model: {}", cleanModel);
 
-            // Parse structured JSON into LlmStructuredResponse
-            return parseStructuredResponse(text);
+            try {
+                Map<String, Object> response = geminiRestClient.post()
+                        .uri(url)
+                        .body(prompt)
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<>() {});
 
-        } catch (HttpStatusCodeException e) {
-            log.error("Gemini API HTTP Error: status={} | body={}",
-                    e.getStatusCode(), e.getResponseBodyAsString(), e);
+                String text = extractTextFromResponse(response);
+                return parseStructuredResponse(text);
 
-            if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) { // HTTP 429
-                throw new ChatException(
-                        "AI_QUOTA_EXCEEDED",
-                        "The AI provider quota has been exceeded. Please try again later.",
-                        HttpStatus.TOO_MANY_REQUESTS,
-                        "Gemini",
-                        e
-                );
-            } else if (e.getStatusCode() == HttpStatus.UNAUTHORIZED || e.getStatusCode() == HttpStatus.FORBIDDEN) { // HTTP 401 / 403
-                throw new ChatException(
-                        "AI_AUTHENTICATION_FAILED",
-                        "Authentication with the AI provider failed.",
-                        HttpStatus.UNAUTHORIZED,
-                        "Gemini",
-                        e
-                );
-            } else if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) { // HTTP 503
-                throw new ChatException(
-                        "AI_PROVIDER_UNAVAILABLE",
-                        "The AI provider is temporarily unavailable. Please try again later.",
-                        HttpStatus.SERVICE_UNAVAILABLE,
-                        "Gemini",
-                        e
-                );
-            } else {
-                throw new ChatException(
-                        "AI_RESPONSE_FAILED",
-                        "AI provider returned error: " + e.getStatusCode().value(),
-                        HttpStatus.BAD_GATEWAY,
-                        "Gemini",
-                        e
-                );
+            } catch (HttpStatusCodeException e) {
+                failedCount++;
+                lastException = e;
+                int statusCode = e.getStatusCode().value();
+
+                if (statusCode == HttpStatus.TOO_MANY_REQUESTS.value()) { // 429
+                    log.warn("Model {} failed with 429, trying next...", cleanModel);
+                } else if (statusCode == HttpStatus.NOT_FOUND.value()) { // 404
+                    allQuotaFailures = false;
+                    log.warn("Model {} failed with 404, trying next...", cleanModel);
+                } else if (e.getStatusCode().is5xxServerError()) { // 5xx
+                    allQuotaFailures = false;
+                    log.warn("Model {} failed with {}, trying next...", cleanModel, statusCode);
+                } else if (statusCode == HttpStatus.UNAUTHORIZED.value() || statusCode == HttpStatus.FORBIDDEN.value()) {
+                    throw new ChatException(
+                            "AI_AUTHENTICATION_FAILED",
+                            "Authentication with the AI provider failed. Check your GEMINI_API_KEY.",
+                            HttpStatus.UNAUTHORIZED,
+                            "Gemini",
+                            e
+                    );
+                } else {
+                    allQuotaFailures = false;
+                    log.warn("Model {} failed with status {}, trying next...", cleanModel, statusCode);
+                }
+            } catch (ResourceAccessException e) {
+                failedCount++;
+                lastException = e;
+                allQuotaFailures = false;
+                log.warn("Model {} failed with network timeout/error, trying next...", cleanModel);
+            } catch (ChatException e) {
+                throw e;
+            } catch (Exception e) {
+                failedCount++;
+                lastException = e;
+                allQuotaFailures = false;
+                log.warn("Model {} failed unexpectedly: {}, trying next...", cleanModel, e.getMessage());
             }
-        } catch (ResourceAccessException e) {
-            log.error("Gemini API connection/timeout error: {}", e.getMessage(), e);
+        }
+
+        if (failedCount > 0 && allQuotaFailures) {
             throw new ChatException(
-                    "AI_TIMEOUT",
-                    "Request to AI provider timed out or failed to connect.",
-                    HttpStatus.GATEWAY_TIMEOUT,
+                    "AI_QUOTA_EXCEEDED",
+                    "The AI provider quota has been exceeded for all available models. Please try again later or update GEMINI_API_KEY.",
+                    HttpStatus.TOO_MANY_REQUESTS,
                     "Gemini",
-                    e
-            );
-        } catch (ChatException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Gemini API call failed: {}", e.getMessage(), e);
-            throw new ChatException(
-                    "AI_RESPONSE_FAILED",
-                    "Failed to generate AI response: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Gemini",
-                    e
+                    lastException
             );
         }
+
+        throw new ChatException(
+                "AI_RESPONSE_FAILED",
+                "All AI provider models failed. Last error: " + (lastException != null ? lastException.getMessage() : "Unknown error"),
+                HttpStatus.BAD_GATEWAY,
+                "Gemini",
+                lastException
+        );
     }
 
     @SuppressWarnings("unchecked")

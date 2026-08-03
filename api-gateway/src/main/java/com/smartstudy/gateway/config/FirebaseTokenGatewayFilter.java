@@ -34,10 +34,6 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        if (FirebaseApp.getApps().isEmpty()) {
-            throw new ServerErrorException("Firebase App is down", null);
-        }
-
         String path = exchange.getRequest().getURI().getPath();
 
         if (shouldSkipFilter(exchange, path)) {
@@ -50,17 +46,21 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String token = authorization.substring(7);
+        if (FirebaseApp.getApps().isEmpty()) {
+            log.error("FirebaseApp is not initialized. Please verify FIREBASE_CREDENTIALS configuration.");
+            return writeUnauthorizedResponse(exchange, "Authentication service is unavailable (Firebase not initialized)");
+        }
+
+        String token = authorization.substring(7).trim();
+        if (token.isEmpty()) {
+            return writeUnauthorizedResponse(exchange, "Bearer token cannot be empty");
+        }
+
         try {
             FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(token);
             String userId = firebaseToken.getUid();
             log.info("Firebase token verified for user: {} on path: {}", userId, path);
 
-            // Build the mutated request:
-            // 1. Remove any client-supplied X-User-Id (prevent spoofing)
-            // 2. Inject the trusted X-User-Id from the verified Firebase token
-            // 3. Remove the Authorization header before forwarding (defense in depth)
-            //    Downstream services should never see the raw Firebase token.
             ServerWebExchange mutatedExchange = exchange.mutate()
                     .request(exchange.getRequest().mutate()
                             .headers(httpHeaders -> {
@@ -73,8 +73,11 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
 
             return chain.filter(mutatedExchange);
         } catch (FirebaseAuthException e) {
-            log.warn("Invalid Firebase token for path: {}", path);
+            log.warn("Invalid Firebase token for path: {}: {}", path, e.getMessage());
             return writeUnauthorizedResponse(exchange, "Invalid or expired Firebase token");
+        } catch (Exception e) {
+            log.warn("Error processing Firebase authentication token for path {}: {}", path, e.getMessage());
+            return writeUnauthorizedResponse(exchange, "Invalid or malformed authentication token");
         }
     }
 

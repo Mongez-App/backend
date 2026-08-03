@@ -60,7 +60,9 @@ public class TaskService {
     public TaskResponse createTask(String userId, CreateTaskRequest request) {
         log.info("Creating task for userId: {} | title: {}", userId, request.title());
         LocalDate scheduledDate = request.date() != null ? request.date() : LocalDate.now();
-        Priority priority = taskPriorityService.determinePriority(userId, request.courseId(), scheduledDate);
+        Priority priority = request.priority() != null
+                ? request.priority()
+                : taskPriorityService.determinePriority(userId, request.courseId(), scheduledDate);
         Task task = Task.builder()
                 .userId(userId)
                 .courseId(request.courseId())

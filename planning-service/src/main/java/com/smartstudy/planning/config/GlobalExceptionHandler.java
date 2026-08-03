@@ -126,12 +126,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
-        log.warn("HttpMessageNotReadableException: Malformed request body.");
+        String detailMessage = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+        log.warn("HttpMessageNotReadableException: {}", detailMessage);
         ApiErrorResponse error = new ApiErrorResponse(
                 false,
                 "Validation Failed",
-                "Malformed request body.",
-                java.util.List.of("Malformed request body.")
+                "Malformed request body: " + (detailMessage != null ? detailMessage : "Invalid JSON format"),
+                java.util.List.of(detailMessage != null ? detailMessage : "Malformed request body.")
         );
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }

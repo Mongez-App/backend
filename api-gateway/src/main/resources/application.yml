@@ -20,7 +20,9 @@ spring:
             - name: Path
               args:
                 patterns:
+                  - /api/v1/auth
                   - /api/v1/auth/**
+                  - /api/v1/users
                   - /api/v1/users/**
           filters:
             - StripPrefix=2
@@ -35,11 +37,17 @@ spring:
             - name: Path
               args:
                 patterns:
+                  - /api/v1/tasks
                   - /api/v1/tasks/**
+                  - /api/v1/courses
                   - /api/v1/courses/**
+                  - /api/v1/materials
                   - /api/v1/materials/**
+                  - /api/v1/roadmap
                   - /api/v1/roadmap/**
+                  - /api/v1/sessions
                   - /api/v1/sessions/**
+                  - /api/v1/home
                   - /api/v1/home/**
           filters:
             - StripPrefix=2

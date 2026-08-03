@@ -19,6 +19,11 @@ spring:
     password: ${POSTGRES_PASSWORD:smartstudy}
   jpa:
     open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 5
+    locations: classpath:db/migration
 
 server:
   port: ${PORT:8082}

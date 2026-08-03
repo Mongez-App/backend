@@ -65,11 +65,13 @@ public class Task {
     @Column(name = "total_parts")
     private Integer totalParts;
 
+    @Builder.Default
     @Column(nullable = false)
-    private boolean locked;
+    private boolean locked = false;
 
+    @Builder.Default
     @Column(nullable = false)
-    private boolean missed;
+    private boolean missed = false;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

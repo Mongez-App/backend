@@ -1,6 +1,7 @@
 package com.smartstudy.planning.controller;
 
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
+import com.smartstudy.planning.dto.request.CreateMaterialRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.*;
 import com.smartstudy.planning.service.CourseService;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -99,7 +101,7 @@ public class CourseController {
         return taskService.getTasksByCourse(userId, courseId, date);
     }
 
-    @PostMapping("/{courseId}/materials")
+    @PostMapping(value = "/{courseId}/materials", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public MaterialResponse createMaterial(
             @RequestHeader("X-User-Id") String userId,
@@ -107,9 +109,20 @@ public class CourseController {
             @RequestParam("file") MultipartFile file,
             @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes,
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
-        log.info("Incoming request: POST /courses/{}/materials | userId: {}", courseId, userId);
+        log.info("Incoming request: POST /courses/{}/materials (multipart) | userId: {}", courseId, userId);
         validateUserId(userId);
         return courseService.createMaterial(userId, courseId, file, dailyStudyMinutes, preferredDays);
+    }
+
+    @PostMapping(value = "/{courseId}/materials", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.OK)
+    public CreateMaterialResponse registerMaterialMetadata(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable UUID courseId,
+            @Valid @RequestBody CreateMaterialRequest request) {
+        log.info("Incoming request: POST /courses/{}/materials (JSON metadata) | userId: {}", courseId, userId);
+        validateUserId(userId);
+        return courseService.registerMaterialMetadata(userId, courseId, request);
     }
 
     @DeleteMapping("/{courseId}/materials/{materialId}")

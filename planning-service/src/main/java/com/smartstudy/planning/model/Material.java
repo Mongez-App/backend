@@ -54,6 +54,8 @@ public class Material {
 
     private String filePath;
 
+    private String deviceFileUri;
+
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 

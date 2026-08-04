@@ -67,6 +67,10 @@ gemini:
     max-output-tokens: 2048
     temperature: 0.3
 
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:}
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+
 storage:
   materials:
     base-dir: ${MATERIAL_STORAGE_DIR:uploads/materials}

@@ -10,8 +10,11 @@ import java.util.UUID;
 public record MaterialResponse(
         @JsonProperty("material_id") UUID materialId,
         @JsonProperty("name") String name,
+        @JsonProperty("content_type") String contentType,
+        @JsonProperty("file_size_bytes") Long fileSizeBytes,
         @JsonProperty("page_count") Integer pageCount,
-        @JsonProperty("file_size_mb") double fileSizeMb,
+        @JsonProperty("device_file_uri") String deviceFileUri,
+        @JsonProperty("file_size_mb") Double fileSizeMb,
         @JsonProperty("status") String status,
         @JsonProperty("uploaded_at") Instant uploadedAt,
         @JsonProperty("processed_at") Instant processedAt,

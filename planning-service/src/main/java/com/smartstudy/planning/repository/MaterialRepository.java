@@ -22,4 +22,6 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
 
     Optional<Material> findFirstByStatusAndRetryCountLessThanOrderByUploadedAtAsc(
             MaterialStatus status, int maxRetries);
+
+    Optional<Material> findByIdAndUserIdAndStatus(UUID id, String userId, MaterialStatus status);
 }

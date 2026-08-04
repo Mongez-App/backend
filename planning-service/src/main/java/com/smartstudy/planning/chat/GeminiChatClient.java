@@ -33,13 +33,16 @@ public class GeminiChatClient {
     private final RestClient geminiRestClient;
     private final GeminiProperties geminiProps;
     private final ObjectMapper objectMapper;
+    private final OpenRouterChatClient openRouterChatClient;
 
     public GeminiChatClient(RestClient geminiRestClient,
                             GeminiProperties geminiProps,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            OpenRouterChatClient openRouterChatClient) {
         this.geminiRestClient = geminiRestClient;
         this.geminiProps = geminiProps;
         this.objectMapper = objectMapper;
+        this.openRouterChatClient = openRouterChatClient;
     }
 
     /**
@@ -60,7 +63,7 @@ public class GeminiChatClient {
      * @throws ChatException if the API call fails or response is unparseable
      */
     public LlmStructuredResponse generate(GeminiPrompt prompt) {
-        boolean allQuotaFailures = true;
+        boolean providerUnavailable = true;
         int failedCount = 0;
         Exception lastException = null;
 
@@ -68,7 +71,7 @@ public class GeminiChatClient {
             String cleanModel = model.startsWith("models/") ? model : "models/" + model;
             String url = "/" + cleanModel + ":generateContent";
 
-            log.info("Trying model: {}", cleanModel);
+            log.info("Trying Gemini model: {}", cleanModel);
 
             try {
                 Map<String, Object> response = geminiRestClient.post()
@@ -86,14 +89,13 @@ public class GeminiChatClient {
                 int statusCode = e.getStatusCode().value();
 
                 if (statusCode == HttpStatus.TOO_MANY_REQUESTS.value()) { // 429
-                    log.warn("Model {} failed with 429, trying next...", cleanModel);
+                    log.warn("Gemini returned 429 for model {}", cleanModel);
                 } else if (statusCode == HttpStatus.NOT_FOUND.value()) { // 404
-                    allQuotaFailures = false;
-                    log.warn("Model {} failed with 404, trying next...", cleanModel);
+                    log.warn("Model {} failed with 404 Not Found, trying next...", cleanModel);
                 } else if (e.getStatusCode().is5xxServerError()) { // 5xx
-                    allQuotaFailures = false;
                     log.warn("Model {} failed with {}, trying next...", cleanModel, statusCode);
                 } else if (statusCode == HttpStatus.UNAUTHORIZED.value() || statusCode == HttpStatus.FORBIDDEN.value()) {
+                    providerUnavailable = false;
                     throw new ChatException(
                             "AI_AUTHENTICATION_FAILED",
                             "Authentication with the AI provider failed. Check your GEMINI_API_KEY.",
@@ -102,37 +104,31 @@ public class GeminiChatClient {
                             e
                     );
                 } else {
-                    allQuotaFailures = false;
+                    providerUnavailable = false;
                     log.warn("Model {} failed with status {}, trying next...", cleanModel, statusCode);
                 }
             } catch (ResourceAccessException e) {
                 failedCount++;
                 lastException = e;
-                allQuotaFailures = false;
                 log.warn("Model {} failed with network timeout/error, trying next...", cleanModel);
             } catch (ChatException e) {
                 throw e;
             } catch (Exception e) {
                 failedCount++;
                 lastException = e;
-                allQuotaFailures = false;
+                providerUnavailable = false;
                 log.warn("Model {} failed unexpectedly: {}, trying next...", cleanModel, e.getMessage());
             }
         }
 
-        if (failedCount > 0 && allQuotaFailures) {
-            throw new ChatException(
-                    "AI_QUOTA_EXCEEDED",
-                    "The AI provider quota has been exceeded for all available models. Please try again later or update GEMINI_API_KEY.",
-                    HttpStatus.TOO_MANY_REQUESTS,
-                    "Gemini",
-                    lastException
-            );
+        if (failedCount > 0 && providerUnavailable) {
+            log.info("Switching to OpenRouter...");
+            return openRouterChatClient.generate(prompt);
         }
 
         throw new ChatException(
                 "AI_RESPONSE_FAILED",
-                "All AI provider models failed. Last error: " + (lastException != null ? lastException.getMessage() : "Unknown error"),
+                "All Gemini models failed. Last error: " + (lastException != null ? lastException.getMessage() : "Unknown error"),
                 HttpStatus.BAD_GATEWAY,
                 "Gemini",
                 lastException

@@ -56,6 +56,13 @@ public class FileStorageService {
     }
 
     /**
+     * Resolve a relative file path against baseDir.
+     */
+    public Path resolve(String relativePath) {
+        return baseDir.resolve(relativePath);
+    }
+
+    /**
      * Delete a single material file from disk.
      */
     public void delete(String userId, UUID courseId, UUID materialId) {

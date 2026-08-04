@@ -49,6 +49,8 @@ spring:
                   - /api/v1/sessions/**
                   - /api/v1/home
                   - /api/v1/home/**
+                  - /api/v1/upload
+                  - /api/v1/upload/**
           filters:
             - StripPrefix=2
             - name: RequestSize

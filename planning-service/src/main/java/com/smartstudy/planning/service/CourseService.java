@@ -2,11 +2,14 @@ package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.ai.model.AgentPlanResult;
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
+import com.smartstudy.planning.dto.request.CreateMaterialRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.CourseResponse;
+import com.smartstudy.planning.dto.response.CreateMaterialResponse;
 import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
+import com.smartstudy.planning.dto.response.UploadMaterialResponse;
 import com.smartstudy.planning.dto.scraper.ScraperImportResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.CourseType;
@@ -288,6 +291,71 @@ public class CourseService {
         return toMaterialResponse(saved);
     }
 
+    /**
+     * Step 1 of two-step upload: register material metadata (JSON).
+     * Returns the materialId and upload URL.
+     */
+    @Transactional
+    public CreateMaterialResponse registerMaterialMetadata(String userId, UUID courseId,
+                                                           CreateMaterialRequest request) {
+        log.info("Registering material metadata for course {} | userId: {} | fileName: {}",
+                courseId, userId, request.fileName());
+        getOwnedCourse(userId, courseId);
+
+        Material material = Material.builder()
+                .courseId(courseId)
+                .userId(userId)
+                .name(request.fileName())
+                .contentType(request.contentType())
+                .fileSizeBytes(request.fileSizeBytes())
+                .pageCount(request.pageCount())
+                .deviceFileUri(request.deviceFileUri())
+                .status(MaterialStatus.PENDING)
+                .build();
+        Material saved = materialRepository.save(material);
+
+        String uploadUrl = "/api/v1/upload/" + saved.getId();
+        log.info("Material metadata registered: {} — upload at {}", saved.getId(), uploadUrl);
+        return new CreateMaterialResponse(saved.getId(), uploadUrl, MaterialStatus.PENDING.name());
+    }
+
+    /**
+     * Step 2 of two-step upload: receive the binary file for a PENDING material.
+     */
+    @Transactional
+    public UploadMaterialResponse uploadMaterialFile(String userId, UUID materialId,
+                                                      MultipartFile file,
+                                                      int dailyStudyMinutes, String preferredDays) {
+        log.info("Uploading file for material {} | userId: {}", materialId, userId);
+
+        Material material = materialRepository.findByIdAndUserIdAndStatus(materialId, userId, MaterialStatus.PENDING)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_NOT_FOUND"));
+
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
+        }
+
+        try {
+            String filePath = fileStorageService.save(
+                    userId, material.getCourseId(), materialId, file.getInputStream());
+            material.setFilePath(filePath);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
+        }
+
+        material.setStatus(MaterialStatus.PROCESSING);
+        material.setProcessingStartedAt(Instant.now());
+        materialRepository.save(material);
+
+        triggerAgentForMaterial(userId, material.getCourseId(), materialId, dailyStudyMinutes, preferredDays);
+
+        return new UploadMaterialResponse(
+                materialId,
+                MaterialStatus.PROCESSING.name(),
+                "File uploaded successfully. AI processing has started in the background."
+        );
+    }
+
     @Async
     public void triggerAgentForMaterial(String userId, UUID courseId, UUID materialId,
                                         int dailyStudyMinutes, String preferredDays) {
@@ -350,13 +418,17 @@ public class CourseService {
     }
 
     private MaterialResponse toMaterialResponse(Material material) {
-        double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
+        double sizeMb = material.getFileSizeBytes() != null
+                ? material.getFileSizeBytes() / 1_000_000.0 : 0.0;
         return new MaterialResponse(
                 material.getId(),
                 material.getName(),
+                material.getContentType(),
+                material.getFileSizeBytes(),
                 material.getPageCount(),
+                material.getDeviceFileUri(),
                 sizeMb,
-                material.getStatus().name().toLowerCase(),
+                material.getStatus().name(),
                 material.getUploadedAt(),
                 material.getProcessedAt(),
                 material.getErrorMessage());

@@ -103,6 +103,8 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6334
       - MATERIAL_STORAGE_DIR=/app/uploads/materials
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
     depends_on:
       postgres:
         condition: service_healthy

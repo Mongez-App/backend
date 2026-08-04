@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClient;
 @EnableScheduling
 @EnableConfigurationProperties({
         GeminiProperties.class,
+        OpenRouterProperties.class,
         QdrantProperties.class,
         StorageProperties.class,
         ProcessingProperties.class,
@@ -46,6 +47,18 @@ public class AiPipelineConfig {
                 .defaultHeader("x-goog-api-key", apiKey)
                 .defaultHeader("Content-Type", "application/json")
                 .requestInterceptor(new GeminiRequestLoggingInterceptor())
+                .build();
+    }
+
+    @Bean
+    public RestClient openRouterRestClient(OpenRouterProperties props) {
+        String baseUrl = props.baseUrl() != null && !props.baseUrl().isBlank()
+                ? props.baseUrl()
+                : "https://openrouter.ai/api/v1";
+
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader("Content-Type", "application/json")
                 .build();
     }
 

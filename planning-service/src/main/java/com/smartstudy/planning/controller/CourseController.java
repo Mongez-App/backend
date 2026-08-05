@@ -2,11 +2,15 @@ package com.smartstudy.planning.controller;
 
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
-import com.smartstudy.planning.dto.response.*;
-import com.smartstudy.planning.service.CourseService;
-import com.smartstudy.planning.dto.response.TaskResponse;
+import com.smartstudy.planning.dto.response.CourseEventResponse;
+import com.smartstudy.planning.dto.response.CourseMaterialResponse;
+import com.smartstudy.planning.dto.response.CourseResponse;
+import com.smartstudy.planning.dto.response.CourseTasksResponse;
+import com.smartstudy.planning.dto.response.MaterialResponse;
+import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
+import com.smartstudy.planning.service.CourseService;
 import com.smartstudy.planning.service.EventService;
 import com.smartstudy.planning.service.TaskService;
 import com.smartstudy.shared.exception.BadRequestException;
@@ -14,13 +18,11 @@ import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -81,22 +83,30 @@ public class CourseController {
     }
 
     @GetMapping("/{courseId}/materials")
-    public List<MaterialResponse> getMaterials(
+    public List<CourseMaterialResponse> getCourseMaterials(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId) {
         log.info("Incoming request: GET /courses/{}/materials | userId: {}", courseId, userId);
         validateUserId(userId);
-        return courseService.getMaterials(userId, courseId);
+        return courseService.getCourseMaterials(userId, courseId);
     }
 
     @GetMapping("/{courseId}/tasks")
-    public List<TaskResponse> getCourseTasks(
+    public CourseTasksResponse getCourseTasks(
             @RequestHeader("X-User-Id") String userId,
-            @PathVariable UUID courseId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        log.info("Incoming request: GET /courses/{}/tasks | userId: {} | date: {}", courseId, userId, date);
+            @PathVariable UUID courseId) {
+        log.info("Incoming request: GET /courses/{}/tasks | userId: {}", courseId, userId);
         validateUserId(userId);
-        return taskService.getTasksByCourse(userId, courseId, date);
+        return taskService.getCourseTasksWithMeta(userId, courseId);
+    }
+
+    @GetMapping("/{courseId}/events")
+    public List<CourseEventResponse> getCourseEvents(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable UUID courseId) {
+        log.info("Incoming request: GET /courses/{}/events | userId: {}", courseId, userId);
+        validateUserId(userId);
+        return courseService.getCourseEvents(userId, courseId);
     }
 
     @PostMapping("/{courseId}/materials")

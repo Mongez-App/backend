@@ -22,6 +22,7 @@ spring:
                 patterns:
                   - /api/v1/auth/**
                   - /api/v1/users/**
+                  - /api/v1/teams/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker

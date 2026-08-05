@@ -22,4 +22,6 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
 
     Optional<Event> findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
             String userId, UUID courseId, Instant date);
+
+    List<Event> findByUserId(String userId);
 }

@@ -83,6 +83,22 @@ public class EventService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEvents(String userId) {
+        log.info("Fetching events for userId: {}", userId);
+        return eventRepository.findByUserId(userId).stream()
+                .map(this::toEventResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEvents(String userId, Instant startDate, Instant endDate) {
+        log.info("Fetching events for userId: {} | startDate: {} | endDate: {}", userId, startDate, endDate);
+        return eventRepository.findByUserIdAndStartDateBetween(userId, startDate, endDate).stream()
+                .map(this::toEventResponse)
+                .toList();
+    }
+
     @Transactional
     public AlertResponse createCourseEvent(String userId, UUID courseId, CreateCourseEventRequest request) {
         log.info("Creating event for userId: {} | courseId: {}", userId, courseId);

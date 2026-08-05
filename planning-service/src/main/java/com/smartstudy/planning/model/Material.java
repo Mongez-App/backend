@@ -47,6 +47,9 @@ public class Material {
     @Column(nullable = false)
     private String status;
 
+    @Column(name = "download_url")
+    private String downloadUrl;
+
     @Column(nullable = false, updatable = false)
     private Instant uploadedAt;
 

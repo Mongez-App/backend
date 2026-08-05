@@ -4,17 +4,21 @@ import com.smartstudy.planning.ai.model.AgentPlanResult;
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
+import com.smartstudy.planning.dto.response.CourseMaterialResponse;
 import com.smartstudy.planning.dto.response.CourseResponse;
+import com.smartstudy.planning.dto.response.CourseEventResponse;
 import com.smartstudy.planning.dto.response.MaterialResponse;
 import com.smartstudy.planning.dto.response.StatusResponse;
 import com.smartstudy.planning.dto.scraper.ScraperImportResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.CourseType;
+import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.model.Material;
 import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
+import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
 import com.smartstudy.planning.repository.TaskRepository;
@@ -57,6 +61,7 @@ public class CourseService {
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
+    private final EventRepository eventRepository;
     private final StudyPlannerAgent studyPlannerAgent;
     private final RestTemplateBuilder restTemplateBuilder;
     private static final Path MATERIAL_UPLOAD_DIR = Path.of("uploads", "materials");
@@ -258,6 +263,26 @@ public class CourseService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<CourseMaterialResponse> getCourseMaterials(String userId, UUID courseId) {
+        log.info("Fetching course materials for course {} | userId: {}", courseId, userId);
+        getOwnedCourse(userId, courseId);
+        return materialRepository.findByCourseIdAndUserIdOrderByUploadedAtAsc(courseId, userId)
+                .stream()
+                .map(this::toCourseMaterialResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseEventResponse> getCourseEvents(String userId, UUID courseId) {
+        log.info("Fetching course events for course {} | userId: {}", courseId, userId);
+        getOwnedCourse(userId, courseId);
+        return eventRepository.findByUserIdAndCourseIdAndTaskIdIsNotNull(userId, courseId)
+                .stream()
+                .map(this::toCourseEventResponse)
+                .toList();
+    }
+
     @Transactional
     public MaterialResponse createMaterial(String userId, UUID courseId,
                                               MultipartFile file, int dailyStudyMinutes, String preferredDays) {
@@ -353,6 +378,23 @@ public class CourseService {
         double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
         return new MaterialResponse(material.getId(), material.getName(), sizeMb,
                 material.getStatus(), material.getUploadedAt());
+    }
+
+    private CourseMaterialResponse toCourseMaterialResponse(Material material) {
+        double sizeMb = material.getFileSizeBytes() / 1_000_000.0;
+        // Construct download path/URL - in production this would be a signed URL or CDN path
+        String downloadPath = material.getDownloadUrl() != null ? material.getDownloadUrl() : "/api/v1/materials/" + material.getId() + "/download";
+        return new CourseMaterialResponse(material.getId(), material.getName(), sizeMb,
+                downloadPath, material.getStatus(), material.getUploadedAt());
+    }
+
+    private CourseEventResponse toCourseEventResponse(Event event) {
+        return new CourseEventResponse(
+                event.getId().toString(),
+                event.getTitle(),
+                event.getEventType(),
+                event.getStartDate()
+        );
     }
 
     private double completionPercentage(String userId, UUID courseId) {

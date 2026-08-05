@@ -17,4 +17,6 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     Optional<Course> findByIdAndUserId(UUID id, String userId);
 
     List<Course> findTop5ByUserIdAndExamDateAfterOrderByExamDateAsc(String userId, Instant now);
+
+    List<Course> findByTeamIdAndUserId(String teamId, String userId);
 }

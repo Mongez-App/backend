@@ -1,6 +1,8 @@
 package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.dto.request.CreateTaskRequest;
+import com.smartstudy.planning.dto.response.CourseTasksMeta;
+import com.smartstudy.planning.dto.response.CourseTasksResponse;
 import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.UpdateTaskRequest;
 import com.smartstudy.planning.model.Priority;
@@ -54,6 +56,28 @@ public class TaskService {
         return tasks.stream()
                 .map(taskMapper::toResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CourseTasksResponse getCourseTasksWithMeta(String userId, UUID courseId) {
+        log.info("Fetching course tasks with meta for userId: {} | courseId: {}", userId, courseId);
+        courseRepository.findByIdAndUserId(courseId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+
+        List<Task> tasks = taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId);
+        List<TaskResponse> taskResponses = tasks.stream()
+                .map(taskMapper::toResponse)
+                .toList();
+
+        // Get preferred study time from user preferences (default to 60 minutes if not available)
+        int preferredStudyTimeMinutes = 60; // TODO: Fetch from identity-service or user preferences
+
+        CourseTasksMeta meta = new CourseTasksMeta(
+                preferredStudyTimeMinutes,
+                taskResponses.size()
+        );
+
+        return new CourseTasksResponse(meta, taskResponses);
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.request.CreateEventRequest;
+import com.smartstudy.planning.dto.request.GetEventsRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.EventResponse;
 import com.smartstudy.planning.dto.response.EventsResponse;
@@ -37,6 +38,30 @@ public class EventService {
     private final EventRepository eventRepository;
     private final CourseRepository courseRepository;
     private final TaskRepository taskRepository;
+
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEvents(String userId, GetEventsRequest request) {
+        log.info("Fetching events for userId: {} | startDate: {} | endDate: {}", userId, request.startDate(), request.endDate());
+
+        List<Event> events;
+        if (request.startDate() != null && request.endDate() != null) {
+            Instant startInstant = parseInstant(request.startDate());
+            Instant endInstant = parseInstant(request.endDate());
+            events = eventRepository.findByUserIdAndStartDateBetween(userId, startInstant, endInstant);
+        } else if (request.startDate() != null) {
+            Instant startInstant = parseInstant(request.startDate());
+            events = eventRepository.findByUserIdAndStartDateGreaterThanEqual(userId, startInstant);
+        } else if (request.endDate() != null) {
+            Instant endInstant = parseInstant(request.endDate());
+            events = eventRepository.findByUserIdAndStartDateLessThanEqual(userId, endInstant);
+        } else {
+            events = eventRepository.findByUserId(userId);
+        }
+
+        return events.stream()
+                .map(this::toEventResponse)
+                .toList();
+    }
 
     @Transactional
     public EventsResponse createEvents(String userId, List<CreateEventRequest> requests) {

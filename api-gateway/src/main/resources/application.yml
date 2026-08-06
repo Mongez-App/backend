@@ -37,20 +37,22 @@ spring:
             - name: Path
               args:
                 patterns:
-                  - /api/v1/tasks
-                  - /api/v1/tasks/**
-                  - /api/v1/courses
-                  - /api/v1/courses/**
-                  - /api/v1/materials
-                  - /api/v1/materials/**
-                  - /api/v1/roadmap
-                  - /api/v1/roadmap/**
-                  - /api/v1/sessions
-                  - /api/v1/sessions/**
-                  - /api/v1/home
-                  - /api/v1/home/**
-                  - /api/v1/upload
-                  - /api/v1/upload/**
+                    - /api/v1/calendar/events
+                    - /api/v1/calendar/events/**
+                    - /api/v1/tasks
+                    - /api/v1/tasks/**
+                    - /api/v1/courses
+                    - /api/v1/courses/**
+                    - /api/v1/materials
+                    - /api/v1/materials/**
+                    - /api/v1/roadmap
+                    - /api/v1/roadmap/**
+                    - /api/v1/sessions
+                    - /api/v1/sessions/**
+                    - /api/v1/home
+                    - /api/v1/home/**
+                    - /api/v1/upload
+                    - /api/v1/upload/**
           filters:
             - StripPrefix=2
             - name: RequestSize

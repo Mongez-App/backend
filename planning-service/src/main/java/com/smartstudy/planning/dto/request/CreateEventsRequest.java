@@ -8,6 +8,6 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record CreateEventsRequest(
-        @NotEmpty @Valid @JsonProperty("events") List<CreateEventRequest> events
+        @NotEmpty @Valid @NotNull @JsonProperty("events") List<CreateEventRequest> events
 ) {
 }

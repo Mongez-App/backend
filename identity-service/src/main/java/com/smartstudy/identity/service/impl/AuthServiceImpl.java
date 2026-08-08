@@ -5,6 +5,8 @@ import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.smartstudy.identity.dto.UserMapper;
 import com.smartstudy.identity.dto.request.HandshakeRequest;
+import com.smartstudy.identity.dto.request.UpdateCalendarSyncRequest;
+import com.smartstudy.identity.dto.response.CalendarSyncResponse;
 import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.model.User;
 import com.smartstudy.identity.repository.UserRepository;
@@ -16,6 +18,8 @@ import com.smartstudy.shared.exception.UnauthorizedException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
+
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,6 +110,57 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND",
                         "The authenticated user does not exist in the application database."));
         return userMapper.toHandshakeResponse(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CalendarSyncResponse getCalendarSync(String uid) {
+        log.info("Fetching calendar sync status for uid: {}", uid);
+        User user = userRepository.findById(uid)
+                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND",
+                        "The authenticated user does not exist in the application database."));
+        return toCalendarSyncResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public CalendarSyncResponse updateCalendarSync(String uid, UpdateCalendarSyncRequest request) {
+        log.info("Updating calendar sync settings for uid: {}", uid);
+        User user = userRepository.findById(uid)
+                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND",
+                        "The authenticated user does not exist in the application database."));
+
+        boolean hasUpdates = false;
+
+        if (request.calendarConnected() != null) {
+            user.setCalendarConnected(request.calendarConnected());
+            hasUpdates = true;
+        }
+
+        if (request.calendarSynced() != null) {
+            user.setCalendarSynced(request.calendarSynced());
+            if (request.calendarSynced()) {
+                user.setLastCalendarSyncAt(Instant.now());
+            }
+            hasUpdates = true;
+        }
+
+        if (!hasUpdates) {
+            throw new BadRequestException("INVALID_REQUEST",
+                    "Request body must contain at least one field to update.");
+        }
+
+        userRepository.save(user);
+
+        return toCalendarSyncResponse(user);
+    }
+
+    private CalendarSyncResponse toCalendarSyncResponse(User user) {
+        return new CalendarSyncResponse(
+                user.isCalendarConnected(),
+                user.isCalendarSynced(),
+                user.getLastCalendarSyncAt()
+        );
     }
 
     private void updateUserFields(User user, String name, String avatarUrl, String appearance, String language) {

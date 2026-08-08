@@ -17,6 +17,7 @@ public interface UserMapper {
     @Mapping(target = "userId", source = "id")
     @Mapping(target = "appearance", source = "appearance", qualifiedByName = "appearanceToContract")
     @Mapping(target = "language", source = "language", qualifiedByName = "languageToContract")
+    @Mapping(target = "calendarSyncConnected", source = "calendarConnected")
     @Mapping(target = "stats", source = "user", qualifiedByName = "toStats")
     HandshakeResponse toHandshakeResponse(User user);
 

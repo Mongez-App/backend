@@ -1,6 +1,8 @@
 package com.smartstudy.identity.controller;
 
 import com.smartstudy.identity.dto.request.HandshakeRequest;
+import com.smartstudy.identity.dto.request.UpdateCalendarSyncRequest;
+import com.smartstudy.identity.dto.response.CalendarSyncResponse;
 import com.smartstudy.identity.dto.response.HandshakeResponse;
 import com.smartstudy.identity.service.AuthService;
 import com.smartstudy.identity.service.AuthService.HandshakeResult;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -57,5 +60,20 @@ public class AuthController {
         log.info("Incoming request: GET /auth/me");
         String uid = getFirebaseUid();
         return ResponseEntity.ok(authService.getMe(uid));
+    }
+
+    @GetMapping("/calendar-sync")
+    public ResponseEntity<CalendarSyncResponse> getCalendarSync() {
+        log.info("Incoming request: GET /auth/calendar-sync");
+        String uid = getFirebaseUid();
+        return ResponseEntity.ok(authService.getCalendarSync(uid));
+    }
+
+    @PatchMapping("/calendar-sync")
+    public ResponseEntity<CalendarSyncResponse> updateCalendarSync(
+            @Valid @RequestBody UpdateCalendarSyncRequest request) {
+        log.info("Incoming request: PATCH /auth/calendar-sync");
+        String uid = getFirebaseUid();
+        return ResponseEntity.ok(authService.updateCalendarSync(uid, request));
     }
 }

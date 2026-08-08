@@ -60,6 +60,17 @@ public class User {
     @Builder.Default
     private Integer currentStreakDays = 0;
 
+    @Column(name = "calendar_connected", nullable = false)
+    @Builder.Default
+    private boolean calendarConnected = false;
+
+    @Column(name = "calendar_synced", nullable = false)
+    @Builder.Default
+    private boolean calendarSynced = false;
+
+    @Column(name = "last_calendar_sync_at")
+    private Instant lastCalendarSyncAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

@@ -59,6 +59,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
         try {
             FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(token);
             String userId = firebaseToken.getUid();
+            String email = firebaseToken.getEmail();
             log.info("Firebase token verified for user: {} on path: {}", userId, path);
 
             ServerWebExchange mutatedExchange = exchange.mutate()
@@ -68,6 +69,7 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
                                 httpHeaders.remove("Authorization");
                             })
                             .header("X-User-Id", userId)
+                            .header("X-User-Email", email)
                             .build())
                     .build();
 
@@ -82,19 +84,10 @@ public class FirebaseTokenGatewayFilter implements GlobalFilter, Ordered {
     }
 
     private boolean shouldSkipFilter(ServerWebExchange exchange, String path) {
-        // Handshake does its own token validation inside the service
         if (path.startsWith("/api/v1/auth/handshake")) {
             return true;
         }
-        // POST /api/v1/users is a public endpoint for creating users
-        if ("POST".equalsIgnoreCase(exchange.getRequest().getMethod().name()) && "/api/v1/users".equals(path)) {
-            return true;
-        }
-        // Actuator and swagger
-        if (path.startsWith("/actuator") || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
-            return true;
-        }
-        return false;
+        return path.startsWith("/actuator") || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs");
     }
 
     @Override

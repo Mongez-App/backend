@@ -19,11 +19,13 @@ spring:
           predicates:
             - name: Path
               args:
-                patterns:
-                  - /api/v1/auth
-                  - /api/v1/auth/**
-                  - /api/v1/users
-                  - /api/v1/users/**
+                 patterns:
+                   - /api/v1/auth
+                   - /api/v1/auth/**
+                   - /api/v1/users
+                   - /api/v1/users/**
+                   - /api/v1/organizations
+                   - /api/v1/organizations/**
           filters:
             - StripPrefix=2
             - name: CircuitBreaker
@@ -36,7 +38,7 @@ spring:
           predicates:
             - name: Path
               args:
-                patterns:
+                 patterns:
                     - /api/v1/calendar/events
                     - /api/v1/calendar/events/**
                     - /api/v1/tasks
@@ -53,6 +55,8 @@ spring:
                     - /api/v1/home/**
                     - /api/v1/upload
                     - /api/v1/upload/**
+                    - /api/v1/orgs
+                    - /api/v1/orgs/**
           filters:
             - StripPrefix=2
             - name: RequestSize

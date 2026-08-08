@@ -14,6 +14,7 @@ import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import com.smartstudy.shared.exception.ConflictException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -68,19 +69,32 @@ public class EventService {
         log.info("Creating {} events for userId: {}", requests.size(), userId);
         List<EventResponse> createdResponses = new ArrayList<>();
         List<String> validationErrors = new ArrayList<>();
+        List<Instant[]> validatedRanges = new ArrayList<>();
 
         for (CreateEventRequest request : requests) {
             try {
                 validateEventRequest(request);
                 Instant startInstant = parseInstant(request.startDate());
-                Instant endInstant = request.endDate() != null && !request.endDate().isBlank()
-                        ? parseInstant(request.endDate())
-                        : null;
+                Instant endInstant = parseInstant(request.endDate());
 
-                if (endInstant != null && endInstant.isBefore(startInstant)) {
+                if (endInstant.isBefore(startInstant)) {
                     validationErrors.add("Event '" + request.title() + "': endDate must be equal to or after startDate.");
                     continue;
                 }
+
+                List<Event> overlapping = eventRepository.findOverlappingEvents(userId, startInstant, endInstant);
+                if (!overlapping.isEmpty()) {
+                    throw new ConflictException("OVERLAP_EVENT",
+                            "Event '" + request.title() + "' overlaps with existing event: " + overlapping.getFirst().getTitle());
+                }
+
+                for (Instant[] range : validatedRanges) {
+                    if (rangesOverlap(range[0], range[1], startInstant, endInstant)) {
+                        throw new ConflictException("OVERLAP_EVENT",
+                                "Event '" + request.title() + "' overlaps with another event in the same request.");
+                    }
+                }
+                validatedRanges.add(new Instant[]{startInstant, endInstant});
 
                 Event event = Event.builder()
                         .userId(userId)
@@ -88,6 +102,7 @@ public class EventService {
                         .startDate(startInstant)
                         .endDate(endInstant)
                         .eventType(request.eventType())
+                        .canStudyThrough(request.canStudyThrough())
                         .build();
                 Event saved = eventRepository.save(event);
                 createdResponses.add(toEventResponse(saved));
@@ -205,6 +220,10 @@ public class EventService {
         return nearestEventDate;
     }
 
+    private boolean rangesOverlap(Instant s1, Instant e1, Instant s2, Instant e2) {
+        return s1.isBefore(e2) && s2.isBefore(e1);
+    }
+
     private void validateEventRequest(CreateEventRequest request) {
         List<String> errors = new ArrayList<>();
         if (request.title() == null || request.title().isBlank()) {
@@ -245,7 +264,8 @@ public class EventService {
                 event.getStartDate().toString(),
                 event.getEndDate() != null ? event.getEndDate().toString() : null,
                 event.getCourseId(),
-                courseName
+                courseName,
+                event.getCanStudyThrough() != null ? event.getCanStudyThrough() : false
         );
     }
 }

@@ -63,7 +63,7 @@ public class RoadmapService {
 
         // Fetch only user-created events (taskId IS NULL) over the same window
         // AI-generated events (taskId != null) are internal scheduling artifacts and not shown
-        List<Event> userEvents = eventRepository.findByUserIdAndTaskIdIsNullAndStartDateBetween(
+        List<Event> userEvents = eventRepository.findByUserIdAndTaskIdIsNullAndCourseIdIsNotNullAndStartDateBetween(
                 userId,
                 startDate.atStartOfDay().toInstant(ZoneOffset.UTC),
                 maxEndDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)

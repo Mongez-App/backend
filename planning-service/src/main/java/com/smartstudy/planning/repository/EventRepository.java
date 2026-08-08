@@ -28,4 +28,10 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Event> findByUserIdAndStartDateGreaterThanEqual(String userId, Instant startDate);
 
     List<Event> findByUserIdAndStartDateLessThanEqual(String userId, Instant endDate);
+
+    List<Event> findByCourseIdInAndTaskIdIsNull(List<UUID> courseIds);
+
+    List<Event> findByCourseIdInAndTaskIdIsNotNull(List<UUID> courseIds);
+
+    Optional<Event> findFirstByCourseIdAndStartDateAfterOrderByStartDateAsc(UUID courseId, Instant startDate);
 }

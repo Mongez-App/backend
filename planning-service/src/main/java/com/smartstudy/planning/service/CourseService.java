@@ -18,10 +18,12 @@ import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.model.Task;
+import com.smartstudy.planning.model.TeamMember;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
 import com.smartstudy.planning.repository.TaskRepository;
+import com.smartstudy.planning.repository.TeamMemberRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -58,6 +60,7 @@ public class CourseService {
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final StudyPlannerAgent studyPlannerAgent;
     private final RestTemplateBuilder restTemplateBuilder;
     private final FileStorageService fileStorageService;
@@ -253,10 +256,23 @@ public class CourseService {
     public List<MaterialResponse> getMaterials(String userId, UUID courseId) {
         log.info("Fetching materials for course {} | userId: {}", courseId, userId);
         getOwnedCourse(userId, courseId);
-        return materialRepository.findByCourseIdAndUserIdOrderByUploadedAtAsc(courseId, userId)
+        List<MaterialResponse> userMaterials = materialRepository.findByCourseIdAndUserIdOrderByUploadedAtAsc(courseId, userId)
                 .stream()
                 .map(this::toMaterialResponse)
                 .toList();
+        if (!userMaterials.isEmpty()) {
+            return userMaterials;
+        }
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+        if (course.getTeamId() != null && teamMemberRepository.existsByTeamIdAndUserIdAndStatus(
+                course.getTeamId(), userId, com.smartstudy.planning.enums.TeamMemberStatus.ACCEPTED)) {
+            return materialRepository.findByCourseId(courseId)
+                    .stream()
+                    .map(this::toMaterialResponse)
+                    .toList();
+        }
+        return userMaterials;
     }
 
     @Transactional
@@ -397,8 +413,20 @@ public class CourseService {
     }
 
     public Course getOwnedCourse(String userId, UUID courseId) {
-        return courseRepository.findByIdAndUserId(courseId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
+        Course course = courseRepository.findByIdAndUserId(courseId, userId)
+                .orElse(null);
+        if (course == null) {
+            course = courseRepository.findById(courseId).orElse(null);
+            if (course == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND");
+            }
+            if (course.getTeamId() != null && teamMemberRepository.existsByTeamIdAndUserIdAndStatus(
+                    course.getTeamId(), userId, com.smartstudy.planning.enums.TeamMemberStatus.ACCEPTED)) {
+                return course;
+            }
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND");
+        }
+        return course;
     }
 
     private CourseResponse toResponse(String userId, Course course, boolean includeHidden, String alertMessage) {

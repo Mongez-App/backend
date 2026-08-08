@@ -54,6 +54,15 @@ public class Course {
     @Column(nullable = false)
     private boolean hidden;
 
+    @Column(name = "team_id", length = 128)
+    private String teamId;
+
+    @Column(name = "organization_id", length = 128)
+    private String organizationId;
+
+    @Column(name = "organization_name", length = 255)
+    private String organizationName;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 

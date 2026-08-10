@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
 
@@ -37,34 +38,42 @@ public class User {
     private String avatarUrl;
 
     @Column(name = "is_guest", nullable = false)
+    @ColumnDefault("false")
     @Builder.Default
     private boolean isGuest = false;
 
-@Column(length = 20, nullable = false)
+    @Column(length = 20, nullable = false)
+    @ColumnDefault("'SYSTEM'")
     @Builder.Default
     private String appearance = "SYSTEM";
 
     @Column(length = 20, nullable = false)
+    @ColumnDefault("'en'")
     @Builder.Default
     private String language = "en";
 
     @Column(name = "total_study_hours", nullable = false)
+    @ColumnDefault("0")
     @Builder.Default
     private Integer totalStudyHours = 0;
 
     @Column(name = "completed_tasks_count", nullable = false)
+    @ColumnDefault("0")
     @Builder.Default
     private Integer completedTasksCount = 0;
 
     @Column(name = "current_streak_days", nullable = false)
+    @ColumnDefault("0")
     @Builder.Default
     private Integer currentStreakDays = 0;
 
     @Column(name = "calendar_connected", nullable = false)
+    @ColumnDefault("false")
     @Builder.Default
     private boolean calendarConnected = false;
 
     @Column(name = "calendar_synced", nullable = false)
+    @ColumnDefault("false")
     @Builder.Default
     private boolean calendarSynced = false;
 

@@ -70,7 +70,7 @@ public class StudyPlannerAgent {
             LocalDate examDate = course.getExamDate() != null
                     ? course.getExamDate().atZone(java.time.ZoneOffset.UTC).toLocalDate()
                     : LocalDate.now().plusYears(1);
-            assignPriorities(userId, tasks, materialId, examDate);
+            assignPriorities(userId, courseId, tasks, materialId, examDate);
 
             List<AvailableSlot> slots = calendarQuerierTool.query(
                     userId, courseId.toString(), dailyStudyMinutes, preferredDays);
@@ -93,7 +93,7 @@ public class StudyPlannerAgent {
         }
     }
 
-    private void assignPriorities(String userId, List<ExtractedTask> tasks, UUID materialId, LocalDate examDate) {
+    private void assignPriorities(String userId, UUID courseId, List<ExtractedTask> tasks, UUID materialId, LocalDate examDate) {
         LocalDate today = LocalDate.now();
         long daysToExam = ChronoUnit.DAYS.between(today, examDate);
         int size = tasks.size();
@@ -104,7 +104,7 @@ public class StudyPlannerAgent {
         for (int i = 0; i < size; i++) {
             ExtractedTask task = tasks.get(i);
             LocalDate taskDate = today.plusDays(i);
-            Event nearestEvent = findNearestEvent(userId, taskDate, today);
+            Event nearestEvent = findNearestEvent(userId, courseId, taskDate, today);
             int eventScore = resolveEventTypeScore(nearestEvent);
             int finalScore = Math.max(examScore, eventScore);
             Priority priority = scoreToPriority(finalScore);
@@ -120,7 +120,7 @@ public class StudyPlannerAgent {
         }
     }
 
-    private Event findNearestEvent(String userId, LocalDate date, LocalDate today) {
+    private Event findNearestEvent(String userId, UUID courseId, LocalDate date, LocalDate today) {
         if (userId == null) {
             return null;
         }
@@ -128,7 +128,9 @@ public class StudyPlannerAgent {
         Instant windowEnd = date.plusDays(EVENT_SEARCH_WINDOW_DAYS)
                 .atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        List<Event> events = eventRepository.findByUserIdAndStartDateBetween(userId, windowStart, windowEnd);
+        List<Event> events = courseId != null
+                ? eventRepository.findByUserIdAndCourseIdAndStartDateBetween(userId, courseId, windowStart, windowEnd)
+                : eventRepository.findByUserIdAndStartDateBetween(userId, windowStart, windowEnd);
         if (events.isEmpty()) {
             return null;
         }

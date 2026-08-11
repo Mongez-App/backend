@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,7 +52,7 @@ class TaskPriorityServiceTest {
     void testHighPriority_whenExamWithin7Days() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(5))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of());
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -63,7 +64,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenExamWithin14Days() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(10))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of());
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -75,7 +76,7 @@ class TaskPriorityServiceTest {
     void testLowPriority_whenExamFarAway() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of());
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -89,7 +90,7 @@ class TaskPriorityServiceTest {
     void testHighPriority_whenNearestEventIsExam() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.EXAM, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -101,7 +102,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenNearestEventIsAssignment() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.ASSIGNMENT, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -113,7 +114,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenNearestEventIsQuiz() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.QUIZ, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -125,7 +126,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenNearestEventIsProject() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.PROJECT, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -137,7 +138,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenNearestEventIsMidterm() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.MIDTERM, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -149,7 +150,7 @@ class TaskPriorityServiceTest {
     void testLowPriority_whenNoUpcomingEvents() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of());
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -164,7 +165,7 @@ class TaskPriorityServiceTest {
         Event invalidEvent = new Event();
         invalidEvent.setEventType("invalid_type");
         invalidEvent.setStartDate(today.plusDays(2).atStartOfDay(ZoneOffset.UTC).toInstant());
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(invalidEvent));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -178,7 +179,7 @@ class TaskPriorityServiceTest {
     void testHighPriority_whenExamMediumButEventIsHigh() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(10))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.EXAM, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -187,10 +188,10 @@ class TaskPriorityServiceTest {
     }
 
     @Test
-    void testMediumPriority_whenExamHighButEventIsMedium() {
+    void testHighPriority_whenExamHighButEventIsMedium() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(5))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.ASSIGNMENT, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
@@ -202,7 +203,7 @@ class TaskPriorityServiceTest {
     void testMediumPriority_whenExamLowButEventIsMedium() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
-        when(eventRepository.findByUserIdAndStartDateBetween(anyString(), any(), any()))
+        when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
                 .thenReturn(List.of(createEvent(EventType.ASSIGNMENT, today.plusDays(2))));
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);

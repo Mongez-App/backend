@@ -46,7 +46,7 @@ public class TaskPriorityService {
             daysToExam = computeDaysToExam(courseId, scheduledDate, today);
         }
 
-        Event nearestEvent = findNearestEvent(userId, scheduledDate, today);
+        Event nearestEvent = findNearestEvent(userId, courseId, scheduledDate, today);
 
         int examScore = resolveExamProximityScore(daysToExam);
         int eventScore = resolveEventTypeScore(nearestEvent);
@@ -69,12 +69,14 @@ public class TaskPriorityService {
                 .orElse(Integer.MAX_VALUE);
     }
 
-    private Event findNearestEvent(String userId, LocalDate scheduledDate, LocalDate today) {
+    private Event findNearestEvent(String userId, UUID courseId, LocalDate scheduledDate, LocalDate today) {
         Instant windowStart = scheduledDate.minusDays(3).atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant windowEnd = scheduledDate.plusDays(EVENT_SEARCH_WINDOW_DAYS)
                 .atStartOfDay(ZoneOffset.UTC).toInstant();
 
-        List<Event> events = eventRepository.findByUserIdAndStartDateBetween(userId, windowStart, windowEnd);
+        List<Event> events = courseId != null
+                ? eventRepository.findByUserIdAndCourseIdAndStartDateBetween(userId, courseId, windowStart, windowEnd)
+                : eventRepository.findByUserIdAndStartDateBetween(userId, windowStart, windowEnd);
 
         if (events.isEmpty()) {
             return null;

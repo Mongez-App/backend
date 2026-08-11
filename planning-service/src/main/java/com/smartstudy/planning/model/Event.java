@@ -50,8 +50,9 @@ public class Event {
     @Column(name = "task_id")
     private UUID taskId;
 
-    @Column(nullable = false, columnDefinition = "boolean default false")
-    private Boolean canStudyThrough;
+    @Builder.Default
+    @Column(name = "can_study_through", nullable = false)
+    private Boolean canStudyThrough = false;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

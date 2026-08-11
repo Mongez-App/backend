@@ -265,7 +265,7 @@ public class EventService {
                 event.getEndDate() != null ? event.getEndDate().toString() : null,
                 event.getCourseId(),
                 courseName,
-                event.getCanStudyThrough() != null ? event.getCanStudyThrough() : false
+                event.getCanStudyThrough()
         );
     }
 }

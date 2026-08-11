@@ -35,6 +35,8 @@ public record RoadmapResponse(
     public record RoadmapTaskResponse(
             @JsonProperty("topic") String topic,
             @JsonProperty("duration_minutes") Integer durationMinutes,
+            @JsonProperty("description") String description,
+            @JsonProperty("covered_sections") String coveredSections,
             @JsonProperty("task_date") LocalDate taskDate
     ) {
     }

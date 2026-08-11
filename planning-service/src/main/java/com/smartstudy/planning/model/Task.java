@@ -59,6 +59,12 @@ public class Task {
     @Column(name = "sequence_order")
     private Integer sequenceOrder;
 
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "covered_sections")
+    private String coveredSections;
+
     @Column(name = "split_part")
     private Integer splitPart;
 

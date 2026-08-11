@@ -12,5 +12,7 @@ public interface TaskMapper {
     @Mapping(target = "isCompleted", source = "completed")
     @Mapping(target = "date", source = "scheduledDate")
     @Mapping(target = "sequenceOrder", source = "sequenceOrder")
+    @Mapping(target = "description", source = "description")
+    @Mapping(target = "coveredSections", source = "coveredSections")
     TaskResponse toResponse(Task task);
 }

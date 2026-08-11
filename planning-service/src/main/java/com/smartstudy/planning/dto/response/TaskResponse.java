@@ -16,6 +16,8 @@ public record TaskResponse(
         @JsonProperty("title") String title,
         @JsonProperty("duration_minutes") Integer durationMinutes,
         @JsonProperty("priority") Priority priority,
+        @JsonProperty("description") String description,
+        @JsonProperty("covered_sections") String coveredSections,
         @JsonProperty("completed") boolean isCompleted,
         @JsonProperty("scheduled_date") LocalDate date,
         @JsonProperty("sequence_order") Integer sequenceOrder,

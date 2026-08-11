@@ -167,6 +167,8 @@ public class RoadmapService {
                 .map(task -> new RoadmapResponse.RoadmapTaskResponse(
                         task.getTitle(),
                         task.getDurationMinutes(),
+                        task.getDescription(),
+                        task.getCoveredSections(),
                         task.getScheduledDate()))
                 .toList();
 

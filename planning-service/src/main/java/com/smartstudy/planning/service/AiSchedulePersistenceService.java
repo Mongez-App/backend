@@ -47,6 +47,8 @@ public class AiSchedulePersistenceService {
                     .completed(false)
                     .scheduledDate(part.date())
                     .sequenceOrder(part.sequence())
+                    .description(part.description())
+                    .coveredSections(part.coveredSections() != null ? String.join(",", part.coveredSections()) : null)
                     .splitPart(part.splitPart())
                     .totalParts(part.totalParts())
                     .locked(isIncremental)

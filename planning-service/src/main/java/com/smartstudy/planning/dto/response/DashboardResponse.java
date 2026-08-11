@@ -41,6 +41,8 @@ public record DashboardResponse(
             @JsonProperty("title") String title,
             @JsonProperty("duration_minutes") Integer durationMinutes,
             @JsonProperty("priority") Priority priority,
+            @JsonProperty("description") String description,
+            @JsonProperty("covered_sections") String coveredSections,
             @JsonProperty("is_completed") boolean completed
     ) {
     }

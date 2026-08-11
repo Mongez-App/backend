@@ -53,6 +53,8 @@ public class SchedulerEngineTool {
                         task.sequenceOrder(),
                         totalParts > 1 ? partNumber : null,
                         totalParts > 1 ? totalParts : null,
+                        task.description(),
+                        task.coveredSections(),
                         task.priority() != null ? task.priority() : Priority.MEDIUM
                 );
                 parts.add(part);

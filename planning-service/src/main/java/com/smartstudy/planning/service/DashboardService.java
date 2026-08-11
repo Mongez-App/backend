@@ -63,7 +63,8 @@ public class DashboardService {
 
         List<DashboardResponse.DashboardTaskResponse> taskResponses = todayTasks.stream()
                 .map(task -> new DashboardResponse.DashboardTaskResponse(task.getId(), task.getTitle(),
-                        task.getDurationMinutes(), task.getPriority(), task.isCompleted()))
+                        task.getDurationMinutes(), task.getPriority(), task.getDescription(), task.getCoveredSections(),
+                        task.isCompleted()))
                 .toList();
 
         Instant now = Instant.now();

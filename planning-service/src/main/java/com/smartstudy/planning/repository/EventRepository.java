@@ -26,12 +26,21 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
 
     List<Event> findByUserIdAndTaskIdIsNullAndCourseIdIsNotNullAndStartDateBetween(String userId, Instant startDate, Instant endDate);
 
-    @Query("SELECT e FROM Event e WHERE e.userId = :userId AND e.courseId IS NULL " +
+    @Query("SELECT e FROM Event e WHERE e.userId = :userId " +
+           "AND ((:courseId IS NULL AND e.courseId IS NULL) OR (:courseId IS NOT NULL AND e.courseId IS NOT NULL)) " +
            "AND ((e.endDate IS NULL AND :start < e.startDate AND e.startDate < :end) " +
            "OR (e.endDate IS NOT NULL AND e.startDate < :end AND e.endDate > :start))")
     List<Event> findOverlappingEvents(@Param("userId") String userId,
+                                      @Param("courseId") UUID courseId,
                                       @Param("start") Instant start,
                                       @Param("end") Instant end);
+
+    @Query("SELECT e FROM Event e WHERE e.userId = :userId AND e.courseId IS NOT NULL " +
+           "AND (e.startDate = :instant OR (e.endDate IS NOT NULL AND e.startDate <= :instant AND e.endDate > :instant))")
+    List<Event> findOverlappingCourseEventsAt(@Param("userId") String userId,
+                                              @Param("instant") Instant instant);
+
+    Optional<Event> findByUserIdAndSystemEventTrueAndTitleAndStartDate(String userId, String title, Instant startDate);
 
     Optional<Event> findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
             String userId, UUID courseId, Instant date);

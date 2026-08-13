@@ -54,6 +54,10 @@ public class Event {
     @Column(name = "can_study_through", nullable = false)
     private Boolean canStudyThrough = false;
 
+    @Builder.Default
+    @Column(name = "system_event", nullable = false)
+    private Boolean systemEvent = false;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 

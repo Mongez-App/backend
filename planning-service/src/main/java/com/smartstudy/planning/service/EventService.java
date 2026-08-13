@@ -82,14 +82,34 @@ public class EventService {
                     continue;
                 }
 
-                List<Event> overlapping = eventRepository.findOverlappingEvents(userId, startInstant, endInstant);
+                if (request.systemEvent()) {
+                    eventRepository.findByUserIdAndSystemEventTrueAndTitleAndStartDate(userId, request.title(), startInstant)
+                            .ifPresent(existing -> {
+                                throw new ConflictException("SYSTEM_EVENT_DUPLICATE",
+                                        "Event '" + request.title() + "' already exists on " + startInstant + ".");
+                            });
+                    Event event = Event.builder()
+                            .userId(userId)
+                            .title(request.title())
+                            .startDate(startInstant)
+                            .endDate(endInstant)
+                            .eventType(request.eventType())
+                            .canStudyThrough(request.canStudyThrough())
+                            .systemEvent(true)
+                            .build();
+                    Event saved = eventRepository.save(event);
+                    createdResponses.add(toEventResponse(saved));
+                    continue;
+                }
+
+                List<Event> overlapping = eventRepository.findOverlappingEvents(userId, null, startInstant, endInstant);
                 if (!overlapping.isEmpty()) {
                     throw new ConflictException("OVERLAP_EVENT",
                             "Event '" + request.title() + "' overlaps with existing event: " + overlapping.getFirst().getTitle());
                 }
 
                 for (Instant[] range : validatedRanges) {
-                    if (rangesOverlap(range[0], range[1], startInstant, endInstant)) {
+                    if (rangesOverlap(range[0], range[1], null, startInstant, endInstant, null)) {
                         throw new ConflictException("OVERLAP_EVENT",
                                 "Event '" + request.title() + "' overlaps with another event in the same request.");
                     }
@@ -103,6 +123,7 @@ public class EventService {
                         .endDate(endInstant)
                         .eventType(request.eventType())
                         .canStudyThrough(request.canStudyThrough())
+                        .systemEvent(false)
                         .build();
                 Event saved = eventRepository.save(event);
                 createdResponses.add(toEventResponse(saved));
@@ -132,12 +153,19 @@ public class EventService {
                         List.of("'event_type' must be one of: " + EventType.allowedValues())));
         Instant eventInstant = parseEventDate(request.eventDate());
 
+        List<Event> overlapping = eventRepository.findOverlappingCourseEventsAt(userId, eventInstant);
+        if (!overlapping.isEmpty()) {
+            throw new ConflictException("OVERLAP_EVENT",
+                    "Event '" + request.title() + "' overlaps with existing event: " + overlapping.getFirst().getTitle());
+        }
+
         Event event = Event.builder()
                 .userId(userId)
                 .title(request.title())
                 .startDate(eventInstant)
                 .courseId(courseId)
                 .eventType(eventType.wireValue())
+                .systemEvent(false)
                 .build();
         Event saved = eventRepository.save(event);
 
@@ -220,7 +248,10 @@ public class EventService {
         return nearestEventDate;
     }
 
-    private boolean rangesOverlap(Instant s1, Instant e1, Instant s2, Instant e2) {
+    private boolean rangesOverlap(Instant s1, Instant e1, UUID courseId1, Instant s2, Instant e2, UUID courseId2) {
+        if ((courseId1 == null) != (courseId2 == null)) {
+            return false;
+        }
         return s1.isBefore(e2) && s2.isBefore(e1);
     }
 

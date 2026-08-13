@@ -11,6 +11,7 @@ public record EventResponse(
         @JsonProperty("endDate") String endDate,
         @JsonProperty("course_id") UUID courseId,
         @JsonProperty("course_name") String courseName,
-        @JsonProperty("can_study_through") boolean canStudyThrough
+        @JsonProperty("can_study_through") boolean canStudyThrough,
+        @JsonProperty("system_event") boolean systemEvent
 ) {
 }

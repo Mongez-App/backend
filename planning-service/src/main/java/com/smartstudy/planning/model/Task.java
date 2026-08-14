@@ -43,6 +43,10 @@ public class Task {
     @Column(nullable = false)
     private Integer durationMinutes;
 
+    @Builder.Default
+    @Column(name = "active_spent_time", nullable = false, columnDefinition = "integer default 0")
+    private Integer activeSpentTime = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Priority priority;

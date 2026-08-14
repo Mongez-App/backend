@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,4 +41,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
      * Count messages for a task (used for pagination metadata).
      */
     long countByTaskId(UUID taskId);
+
+    /**
+     * Delete all messages for a set of tasks (material/course deletion cleanup).
+     */
+    @Modifying
+    @Query("DELETE FROM ChatMessage m WHERE m.taskId IN :taskIds")
+    void deleteAllByTaskIdIn(@Param("taskIds") Collection<UUID> taskIds);
 }

@@ -44,6 +44,9 @@ public class Course {
     @Column(nullable = false)
     private Instant startDate;
 
+    @Column(name = "end_date")
+    private Instant endDate;
+
     private Instant examDate;
 
     @Enumerated(EnumType.STRING)

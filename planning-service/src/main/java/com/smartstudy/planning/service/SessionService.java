@@ -50,7 +50,12 @@ public class SessionService {
         StudySession session = studySessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND"));
         Instant endedAt = Instant.now();
-        int minutes = Math.max(1, (int) Duration.between(session.getStartedAt(), endedAt).toMinutes());
+        // Prefer the active time reported by the client so that time spent away from
+        // the app is not counted; wall-clock elapsed time is only a fallback for
+        // older clients that do not send active_spent_time.
+        int minutes = request.activeSpentTime() != null
+                ? request.activeSpentTime()
+                : Math.max(1, (int) Duration.between(session.getStartedAt(), endedAt).toMinutes());
         session.setEndedAt(endedAt);
         session.setDurationMinutesLogged(minutes);
         session.setTaskCompleted(request.taskCompleted());

@@ -15,6 +15,7 @@ public record TaskResponse(
         @JsonProperty("course_id") UUID courseId,
         @JsonProperty("title") String title,
         @JsonProperty("duration_minutes") Integer durationMinutes,
+        @JsonProperty("active_spent_time") Integer activeSpentTime,
         @JsonProperty("priority") Priority priority,
         @JsonProperty("description") String description,
         @JsonProperty("covered_sections") String coveredSections,

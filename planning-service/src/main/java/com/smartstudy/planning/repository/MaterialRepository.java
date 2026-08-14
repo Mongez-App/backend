@@ -26,4 +26,6 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
     Optional<Material> findByIdAndUserIdAndStatus(UUID id, String userId, MaterialStatus status);
 
     List<Material> findByCourseId(UUID courseId);
+
+    List<Material> findByIdIn(java.util.Collection<UUID> ids);
 }

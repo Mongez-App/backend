@@ -56,6 +56,12 @@ public class TaskService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public TaskResponse getTask(String userId, UUID taskId) {
+        log.info("Fetching task {} for userId: {}", taskId, userId);
+        return taskMapper.toResponse(getOwnedTask(userId, taskId));
+    }
+
     @Transactional
     public TaskResponse createTask(String userId, CreateTaskRequest request) {
         log.info("Creating task for userId: {} | title: {}", userId, request.title());
@@ -68,10 +74,11 @@ public class TaskService {
                 .courseId(request.courseId())
                 .title(request.title())
                 .durationMinutes(request.durationMinutes())
+                .activeSpentTime(request.activeSpentTime() != null ? request.activeSpentTime() : 0)
                 .priority(priority)
                 .completed(false)
                 .scheduledDate(scheduledDate)
-                .sequenceOrder(request.sequenceOrder())
+                .sequenceOrder(request.sequenceOrder() != null ? request.sequenceOrder() : 0)
                 .build();
         return taskMapper.toResponse(taskRepository.save(task));
     }
@@ -98,6 +105,9 @@ public class TaskService {
         if (request.sequenceOrder() != null) {
             task.setSequenceOrder(request.sequenceOrder());
         }
+        if (request.activeSpentTime() != null) {
+            task.setActiveSpentTime(request.activeSpentTime());
+        }
         return taskMapper.toResponse(task);
     }
 
@@ -108,7 +118,11 @@ public class TaskService {
     }
 
     private Task getOwnedTask(String userId, UUID taskId) {
-        return taskRepository.findByIdAndUserId(taskId, userId)
+        Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND"));
+        if (!userId.equals(task.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "TASK_NOT_OWNED");
+        }
+        return task;
     }
 }

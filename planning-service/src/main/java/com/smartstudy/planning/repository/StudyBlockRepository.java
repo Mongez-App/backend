@@ -18,4 +18,6 @@ public interface StudyBlockRepository extends JpaRepository<StudyBlock, UUID> {
     List<StudyBlock> findByIdInAndUserId(Collection<UUID> ids, String userId);
 
     void deleteByCourseIdAndUserId(UUID courseId, String userId);
+
+    void deleteByUserIdAndTaskIdIn(String userId, Collection<UUID> taskIds);
 }

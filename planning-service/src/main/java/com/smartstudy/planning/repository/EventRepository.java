@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,4 +57,8 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Event> findByCourseIdInAndTaskIdIsNotNull(List<UUID> courseIds);
 
     Optional<Event> findFirstByCourseIdAndStartDateAfterOrderByStartDateAsc(UUID courseId, Instant startDate);
+
+    void deleteByUserIdAndCourseId(String userId, UUID courseId);
+
+    void deleteByUserIdAndTaskIdIn(String userId, Collection<UUID> taskIds);
 }

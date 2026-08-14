@@ -16,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @RestController()
-@RequestMapping("/orgs")
+@RequestMapping("/organization")
 @RequiredArgsConstructor
 public class TeamController {
 
@@ -27,7 +27,7 @@ public class TeamController {
     public List<TeamResponse> getTeams(
             @PathVariable String orgId,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: GET /orgs/{}/teams | userId: {}", orgId, userId);
+        log.info("Incoming request: GET /organization/{}/teams | userId: {}", orgId, userId);
         validateUserId(userId);
         return teamService.getUserTeams(userId, orgId);
     }
@@ -37,7 +37,7 @@ public class TeamController {
             @PathVariable String orgId,
             @PathVariable String teamId,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: GET /orgs/{}/teams/{}/courses | userId: {}", orgId, teamId, userId);
+        log.info("Incoming request: GET /organization/{}/teams/{}/courses | userId: {}", orgId, teamId, userId);
         validateUserId(userId);
         return teamService.getTeamCourses(teamId, userId, orgId);
     }
@@ -47,7 +47,7 @@ public class TeamController {
             @PathVariable String orgId,
             @PathVariable String teamId,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: GET /orgs/{}/team/{}/events | userId: {}", orgId, teamId, userId);
+        log.info("Incoming request: GET /organization/{}/team/{}/events | userId: {}", orgId, teamId, userId);
         validateUserId(userId);
         return teamService.getTeamEvents(teamId, userId, orgId);
     }
@@ -56,7 +56,7 @@ public class TeamController {
     public DiscoverResponse discover(
             @PathVariable String orgId,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: GET /orgs/{}/teams/discover | userId: {}", orgId, userId);
+        log.info("Incoming request: GET /organization/{}/teams/discover | userId: {}", orgId, userId);
         validateUserId(userId);
         return teamService.discover(userId, orgId);
     }
@@ -66,7 +66,7 @@ public class TeamController {
             @PathVariable String orgId,
             @RequestParam String q,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: GET /orgs/{}/teams/search | q: {} | userId: {}", orgId, q, userId);
+        log.info("Incoming request: GET /organization/{}/teams/search | q: {} | userId: {}", orgId, q, userId);
         validateUserId(userId);
         if (q == null || q.isBlank()) {
             throw new BadRequestException("MISSING_QUERY", "Search query parameter 'q' is required.");
@@ -79,7 +79,7 @@ public class TeamController {
             @PathVariable String orgId,
             @Valid @RequestBody JoinTeamRequest request,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: POST /orgs/{}/teams/join | userId: {}", orgId, userId);
+        log.info("Incoming request: POST /organization/{}/teams/join | userId: {}", orgId, userId);
         validateUserId(userId);
         return teamService.joinTeam(userId, orgId, request.inviteCode());
     }
@@ -90,7 +90,7 @@ public class TeamController {
             @PathVariable String orgId,
             @Valid @RequestBody CreateTeamRequest request,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Incoming request: POST /orgs/{}/teams | userId: {}", orgId, userId);
+        log.info("Incoming request: POST /organization/{}/teams | userId: {}", orgId, userId);
         validateUserId(userId);
         return teamService.createTeam(userId, orgId, request);
     }

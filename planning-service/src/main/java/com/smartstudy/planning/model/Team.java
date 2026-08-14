@@ -36,6 +36,9 @@ public class Team {
     @Column(name = "organization_name", length = 255)
     private String organizationName;
 
+    @Column(name = "owner_id", length = 128)
+    private String ownerId;
+
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 

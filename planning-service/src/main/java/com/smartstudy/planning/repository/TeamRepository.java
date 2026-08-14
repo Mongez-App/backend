@@ -11,4 +11,8 @@ public interface TeamRepository extends JpaRepository<Team, String> {
     Optional<Team> findByInviteCode(String inviteCode);
 
     List<Team> findByIdIn(List<String> ids);
+
+    List<Team> findByOrganizationIdOrderByCreatedAtAsc(String organizationId);
+
+    boolean existsByOrganizationIdAndNameIgnoreCase(String organizationId, String name);
 }

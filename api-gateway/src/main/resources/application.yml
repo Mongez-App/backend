@@ -57,6 +57,8 @@ spring:
                     - /api/v1/upload/**
                     - /api/v1/orgs
                     - /api/v1/orgs/**
+                    - /api/v1/organization
+                    - /api/v1/organization/**
           filters:
             - StripPrefix=2
             - name: RequestSize

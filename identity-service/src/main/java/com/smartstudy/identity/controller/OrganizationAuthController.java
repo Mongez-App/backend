@@ -15,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/organizations/auth")
+@RequestMapping("/organization/auth")
 @RequiredArgsConstructor
 public class OrganizationAuthController {
 
@@ -27,7 +27,7 @@ public class OrganizationAuthController {
             @Valid @RequestBody OrganizationRegisterRequest request,
             @RequestHeader("X-User-Id") String uid,
             @RequestHeader("X-User-Email") String email) {
-        log.info("Incoming request: POST /organizations/auth/register");
+        log.info("Incoming request: POST /organization/auth/register");
         OrganizationDataResponse data = organizationAuthService.register(uid, email, request.name());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new OrganizationAuthResponse("Organization registered successfully", data));
@@ -36,7 +36,7 @@ public class OrganizationAuthController {
     @PostMapping("/login")
     public ResponseEntity<OrganizationAuthResponse> login(
             @RequestHeader("X-User-Id") String uid) {
-        log.info("Incoming request: POST /organizations/auth/login");
+        log.info("Incoming request: POST /organization/auth/login");
         OrganizationDataResponse data = organizationAuthService.login(uid);
         return ResponseEntity.ok(new OrganizationAuthResponse("Authentication successful", data));
     }
@@ -44,7 +44,7 @@ public class OrganizationAuthController {
     @PostMapping("/logout")
     public ResponseEntity<OrganizationLogoutResponse> logout(
             @RequestHeader("X-User-Id") String uid) {
-        log.info("Incoming request: POST /organizations/auth/logout");
+        log.info("Incoming request: POST /organization/auth/logout");
         organizationAuthService.logout(uid);
         return ResponseEntity.ok(new OrganizationLogoutResponse("Successfully logged out and session revoked."));
     }
@@ -53,7 +53,7 @@ public class OrganizationAuthController {
     public ResponseEntity<OrganizationAuthResponse> update(
             @RequestHeader("X-User-Id") String uid,
             @Valid @RequestBody OrganizationUpdateRequest request) {
-        log.info("Incoming request: PATCH /organizations/auth/update");
+        log.info("Incoming request: PATCH /organization/auth/update");
         OrganizationDataResponse data = organizationAuthService.update(uid, request);
         return ResponseEntity.ok(new OrganizationAuthResponse("Organization updated successfully", data));
     }

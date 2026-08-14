@@ -44,6 +44,15 @@ public class TaskController {
         return taskService.getTasks(userId, date);
     }
 
+    @GetMapping("/{taskId}")
+    public TaskResponse getTask(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable UUID taskId) {
+        log.info("Incoming request: GET /tasks/{} | userId: {}", taskId, userId);
+        validateUserId(userId);
+        return taskService.getTask(userId, taskId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TaskResponse createTask(

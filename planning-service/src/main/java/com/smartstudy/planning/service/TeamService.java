@@ -138,11 +138,12 @@ public class TeamService {
 
     public List<SearchTeamResponse> searchTeams(String query, String userId, String orgId) {
         log.info("Searching teams for query: {} | userId: {} | org: {}", query, userId, orgId);
-        String like = "%" + query.toLowerCase() + "%";
+        String needle = query.toLowerCase();
         List<Team> teams = teamRepository.findAll().stream()
                 .filter(team -> orgId.equals(team.getOrganizationId()))
-                .filter(team -> team.getName().toLowerCase().contains(like)
-                        || team.getOrganizationName().toLowerCase().contains(like))
+                .filter(team -> team.getName().toLowerCase().contains(needle)
+                        || (team.getOrganizationName() != null
+                                && team.getOrganizationName().toLowerCase().contains(needle)))
                 .toList();
 
         List<TeamMember> allMemberships = teamMemberRepository.findByUserIdAndStatusIn(

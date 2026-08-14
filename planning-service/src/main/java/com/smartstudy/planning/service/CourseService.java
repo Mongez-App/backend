@@ -224,7 +224,7 @@ public class CourseService {
     @Transactional
     public CourseResponse updateCourse(String userId, UUID courseId, UpdateCourseRequest request) {
         log.info("Updating course {} for userId: {}", courseId, userId);
-        Course course = getOwnedCourse(userId, courseId);
+        Course course = getStrictlyOwnedCourse(userId, courseId);
         if (request.name() != null) {
             course.setName(request.name());
         }
@@ -255,7 +255,7 @@ public class CourseService {
     @Transactional
     public StatusResponse deleteCourse(String userId, UUID courseId) {
         log.info("Deleting course {} for userId: {}", courseId, userId);
-        Course course = getOwnedCourse(userId, courseId);
+        Course course = getStrictlyOwnedCourse(userId, courseId);
 
         List<Task> tasks = taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId);
         if (!tasks.isEmpty()) {
@@ -483,6 +483,19 @@ public class CourseService {
                 return course;
             }
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND");
+        }
+        return course;
+    }
+
+    /**
+     * Like getOwnedCourse, but requires the caller to be the actual owner.
+     * Team/organization courses are visible to members, yet only the owner may
+     * modify or delete them — they stay with the team otherwise.
+     */
+    private Course getStrictlyOwnedCourse(String userId, UUID courseId) {
+        Course course = getOwnedCourse(userId, courseId);
+        if (!userId.equals(course.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "COURSE_NOT_OWNED");
         }
         return course;
     }

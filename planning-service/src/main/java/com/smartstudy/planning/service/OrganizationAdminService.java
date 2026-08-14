@@ -4,6 +4,10 @@ import com.smartstudy.planning.config.StorageProperties;
 import com.smartstudy.planning.dto.request.OrgCreateCourseRequest;
 import com.smartstudy.planning.dto.request.OrgCreateEventRequest;
 import com.smartstudy.planning.dto.request.OrgCreateTeamRequest;
+import com.smartstudy.planning.dto.request.OrgMemberActionRequest;
+import com.smartstudy.planning.dto.response.OrgJoinRequestListResponse;
+import com.smartstudy.planning.dto.response.OrgJoinRequestResponse;
+import com.smartstudy.planning.dto.response.OrgMemberStatusResponse;
 import com.smartstudy.planning.dto.response.OrgCourseListResponse;
 import com.smartstudy.planning.dto.response.OrgCourseResponse;
 import com.smartstudy.planning.dto.response.OrgEventListResponse;
@@ -22,6 +26,7 @@ import com.smartstudy.planning.model.EventType;
 import com.smartstudy.planning.model.Material;
 import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.Team;
+import com.smartstudy.planning.model.TeamMember;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
@@ -170,6 +175,52 @@ public class OrganizationAdminService {
             throw OrgApiException.notFound("File not found.");
         }
         return path;
+    }
+
+    // ------------------------------------------------------------------
+    // Join requests
+    // ------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public OrgJoinRequestListResponse getJoinRequests(String orgId, String teamId) {
+        log.info("Org {} fetching join requests for team {}", orgId, teamId);
+        requireOrgTeam(orgId, teamId);
+        List<OrgJoinRequestResponse> requests = teamMemberRepository
+                .findByTeamIdAndStatus(teamId, TeamMemberStatus.PENDING)
+                .stream()
+                .sorted(Comparator.comparing(TeamMember::getCreatedAt))
+                .map(member -> new OrgJoinRequestResponse(member.getUserId(), member.getCreatedAt()))
+                .toList();
+        return new OrgJoinRequestListResponse(teamId, requests, requests.size());
+    }
+
+    @Transactional
+    public OrgMemberStatusResponse approveMember(String orgId, OrgMemberActionRequest request) {
+        log.info("Org {} approving user {} for team {}", orgId, request.userId(), request.teamId());
+        return resolveJoinRequest(orgId, request, TeamMemberStatus.ACCEPTED);
+    }
+
+    @Transactional
+    public OrgMemberStatusResponse rejectMember(String orgId, OrgMemberActionRequest request) {
+        log.info("Org {} rejecting user {} for team {}", orgId, request.userId(), request.teamId());
+        return resolveJoinRequest(orgId, request, TeamMemberStatus.REJECTED);
+    }
+
+    private OrgMemberStatusResponse resolveJoinRequest(String orgId, OrgMemberActionRequest request,
+                                                       TeamMemberStatus target) {
+        requireOrgTeam(orgId, request.teamId());
+        TeamMember member = teamMemberRepository
+                .findByTeamIdAndUserId(request.teamId(), request.userId())
+                .orElseThrow(() -> OrgApiException.notFound("Join request was not found."));
+        if (member.getStatus() == TeamMemberStatus.ACCEPTED) {
+            throw OrgApiException.conflict("This user is already a member of the team.");
+        }
+        if (member.getStatus() != TeamMemberStatus.PENDING) {
+            throw OrgApiException.notFound("Join request was not found.");
+        }
+        member.setStatus(target);
+        teamMemberRepository.save(member);
+        return new OrgMemberStatusResponse(request.teamId(), request.userId(), target.name());
     }
 
     // ------------------------------------------------------------------

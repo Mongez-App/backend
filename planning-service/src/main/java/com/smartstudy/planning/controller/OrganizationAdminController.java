@@ -3,6 +3,9 @@ package com.smartstudy.planning.controller;
 import com.smartstudy.planning.dto.request.OrgCreateCourseRequest;
 import com.smartstudy.planning.dto.request.OrgCreateEventRequest;
 import com.smartstudy.planning.dto.request.OrgCreateTeamRequest;
+import com.smartstudy.planning.dto.request.OrgMemberActionRequest;
+import com.smartstudy.planning.dto.response.OrgJoinRequestListResponse;
+import com.smartstudy.planning.dto.response.OrgMemberStatusResponse;
 import com.smartstudy.planning.dto.response.OrgCourseListResponse;
 import com.smartstudy.planning.dto.response.OrgCourseResponse;
 import com.smartstudy.planning.dto.response.OrgEventListResponse;
@@ -83,6 +86,30 @@ public class OrganizationAdminController {
         return ResponseEntity.ok()
                 .contentType(mediaType)
                 .body(new FileSystemResource(path));
+    }
+
+    @GetMapping("/getJoinRequests")
+    public OrgJoinRequestListResponse getJoinRequests(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @RequestParam String teamId) {
+        log.info("Incoming request: GET /organization/getJoinRequests | orgId: {} | teamId: {}", orgId, teamId);
+        return organizationAdminService.getJoinRequests(requireOrg(orgId), teamId);
+    }
+
+    @PostMapping("/approveMember")
+    public OrgMemberStatusResponse approveMember(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @Valid @RequestBody OrgMemberActionRequest request) {
+        log.info("Incoming request: POST /organization/approveMember | orgId: {}", orgId);
+        return organizationAdminService.approveMember(requireOrg(orgId), request);
+    }
+
+    @PostMapping("/rejectMember")
+    public OrgMemberStatusResponse rejectMember(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @Valid @RequestBody OrgMemberActionRequest request) {
+        log.info("Incoming request: POST /organization/rejectMember | orgId: {}", orgId);
+        return organizationAdminService.rejectMember(requireOrg(orgId), request);
     }
 
     @GetMapping("/getCourses")

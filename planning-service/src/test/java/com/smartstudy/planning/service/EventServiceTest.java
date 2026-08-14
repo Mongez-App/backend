@@ -74,7 +74,7 @@ class EventServiceTest {
                 .thenReturn(List.of(existing));
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("New Event", start.toString(), end.toString(), "EXAM", false, false)
+                new CreateEventRequest("New Event", start.toString(), end.toString(), "EXAM", false)
         ));
 
         assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
@@ -89,7 +89,7 @@ class EventServiceTest {
                 .thenReturn(List.of());
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("New Event", start.toString(), end.toString(), "EXAM", false, false)
+                new CreateEventRequest("New Event", start.toString(), end.toString(), "EXAM", false)
         ));
 
         EventsResponse response = eventService.createEvents(userId, request.events());
@@ -137,13 +137,12 @@ class EventServiceTest {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
         Event existing = createEvent("Holiday", start, end, null);
-        existing.setSystemEvent(true);
 
-        when(eventRepository.findByUserIdAndSystemEventTrueAndTitleAndStartDate(eq(userId), eq("Holiday"), eq(start)))
+        when(eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(eq(userId), eq("system"), eq("Holiday"), eq(start)))
                 .thenReturn(Optional.of(existing));
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("Holiday", start.toString(), end.toString(), null, false, true)
+                new CreateEventRequest("Holiday", start.toString(), end.toString(), "system", false)
         ));
 
         assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
@@ -154,7 +153,7 @@ class EventServiceTest {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
 
-        when(eventRepository.findByUserIdAndSystemEventTrueAndTitleAndStartDate(eq(userId), eq("Holiday"), eq(start)))
+        when(eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(eq(userId), eq("system"), eq("Holiday"), eq(start)))
                 .thenReturn(Optional.empty());
         when(eventRepository.save(any(Event.class)))
                 .thenAnswer(invocation -> {
@@ -164,7 +163,7 @@ class EventServiceTest {
                 });
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("Holiday", start.toString(), end.toString(), null, false, true)
+                new CreateEventRequest("Holiday", start.toString(), end.toString(), "system", false)
         ));
 
         EventsResponse response = eventService.createEvents(userId, request.events());
@@ -178,7 +177,7 @@ class EventServiceTest {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
 
-        when(eventRepository.findByUserIdAndSystemEventTrueAndTitleAndStartDate(eq(userId), eq("Holiday"), eq(start)))
+        when(eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(eq(userId), eq("system"), eq("Holiday"), eq(start)))
                 .thenReturn(Optional.empty());
         when(eventRepository.save(any(Event.class)))
                 .thenAnswer(invocation -> {
@@ -188,7 +187,7 @@ class EventServiceTest {
                 });
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("Holiday", start.toString(), end.toString(), null, false, true)
+                new CreateEventRequest("Holiday", start.toString(), end.toString(), "system", false)
         ));
 
         EventsResponse response = eventService.createEvents(userId, request.events());
@@ -207,8 +206,8 @@ class EventServiceTest {
                 .thenReturn(List.of());
 
         CreateEventsRequest request = new CreateEventsRequest(List.of(
-                new CreateEventRequest("Event A", start.toString(), end.toString(), "EXAM", false, false),
-                new CreateEventRequest("Event B", start.toString(), end.toString(), "EXAM", false, false)
+                new CreateEventRequest("Event A", start.toString(), end.toString(), "EXAM", false),
+                new CreateEventRequest("Event B", start.toString(), end.toString(), "EXAM", false)
         ));
 
         assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
@@ -226,7 +225,6 @@ class EventServiceTest {
         event.setCourseId(courseId);
         event.setEventType(EventType.EXAM.wireValue());
         event.setCanStudyThrough(false);
-        event.setSystemEvent(false);
         return event;
     }
 }

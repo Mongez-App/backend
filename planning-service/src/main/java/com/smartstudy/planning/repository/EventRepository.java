@@ -41,7 +41,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Event> findOverlappingCourseEventsAt(@Param("userId") String userId,
                                               @Param("instant") Instant instant);
 
-    Optional<Event> findByUserIdAndSystemEventTrueAndTitleAndStartDate(String userId, String title, Instant startDate);
+    Optional<Event> findByUserIdAndEventTypeAndTitleAndStartDate(String userId, String eventType, String title, Instant startDate);
 
     Optional<Event> findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
             String userId, UUID courseId, Instant date);

@@ -8,7 +8,6 @@ public record CreateEventRequest(
         @NotBlank @JsonProperty("startDate") String startDate,
         @NotBlank @JsonProperty("endDate") String endDate,
         @JsonProperty("event_type") String eventType,
-        @JsonProperty("can_study_through") boolean canStudyThrough,
-        @JsonProperty("system_event") boolean systemEvent
+        @JsonProperty("can_study_through") boolean canStudyThrough
 ) {
 }

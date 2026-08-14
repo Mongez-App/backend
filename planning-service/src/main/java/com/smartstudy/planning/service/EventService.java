@@ -82,8 +82,8 @@ public class EventService {
                     continue;
                 }
 
-                if (request.systemEvent()) {
-                    eventRepository.findByUserIdAndSystemEventTrueAndTitleAndStartDate(userId, request.title(), startInstant)
+                if ("system".equals(request.eventType())) {
+                    eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(userId, "system", request.title(), startInstant)
                             .ifPresent(existing -> {
                                 throw new ConflictException("SYSTEM_EVENT_DUPLICATE",
                                         "Event '" + request.title() + "' already exists on " + startInstant + ".");
@@ -95,7 +95,6 @@ public class EventService {
                             .endDate(endInstant)
                             .eventType(request.eventType())
                             .canStudyThrough(request.canStudyThrough())
-                            .systemEvent(true)
                             .build();
                     Event saved = eventRepository.save(event);
                     createdResponses.add(toEventResponse(saved));
@@ -123,7 +122,6 @@ public class EventService {
                         .endDate(endInstant)
                         .eventType(request.eventType())
                         .canStudyThrough(request.canStudyThrough())
-                        .systemEvent(false)
                         .build();
                 Event saved = eventRepository.save(event);
                 createdResponses.add(toEventResponse(saved));
@@ -165,7 +163,6 @@ public class EventService {
                 .startDate(eventInstant)
                 .courseId(courseId)
                 .eventType(eventType.wireValue())
-                .systemEvent(false)
                 .build();
         Event saved = eventRepository.save(event);
 
@@ -297,7 +294,7 @@ public class EventService {
                 event.getCourseId(),
                 courseName,
                 event.getCanStudyThrough(),
-                event.getSystemEvent()
+                event.getEventType() != null && "system".equals(event.getEventType())
         );
     }
 }

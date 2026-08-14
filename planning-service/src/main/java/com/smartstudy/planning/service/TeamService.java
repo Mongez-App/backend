@@ -138,11 +138,12 @@ public class TeamService {
 
     public List<SearchTeamResponse> searchTeams(String query, String userId, String orgId) {
         log.info("Searching teams for query: {} | userId: {} | org: {}", query, userId, orgId);
-        String like = "%" + query.toLowerCase() + "%";
+        String needle = query.toLowerCase();
         List<Team> teams = teamRepository.findAll().stream()
                 .filter(team -> orgId.equals(team.getOrganizationId()))
-                .filter(team -> team.getName().toLowerCase().contains(like)
-                        || team.getOrganizationName().toLowerCase().contains(like))
+                .filter(team -> team.getName().toLowerCase().contains(needle)
+                        || (team.getOrganizationName() != null
+                                && team.getOrganizationName().toLowerCase().contains(needle)))
                 .toList();
 
         List<TeamMember> allMemberships = teamMemberRepository.findByUserIdAndStatusIn(
@@ -185,13 +186,19 @@ public class TeamService {
             if (status == TeamMemberStatus.PENDING) {
                 throw new ConflictException("PENDING_REQUEST_EXISTS", "Your join request is pending.");
             }
+            // Previously rejected: re-apply on the same membership row instead of
+            // inserting a duplicate.
+            TeamMember member = existing.get();
+            member.setStatus(TeamMemberStatus.PENDING);
+            teamMemberRepository.save(member);
+        } else {
+            TeamMember member = TeamMember.builder()
+                    .teamId(team.getId())
+                    .userId(userId)
+                    .status(TeamMemberStatus.PENDING)
+                    .build();
+            teamMemberRepository.save(member);
         }
-        TeamMember member = TeamMember.builder()
-                .teamId(team.getId())
-                .userId(userId)
-                .status(TeamMemberStatus.PENDING)
-                .build();
-        teamMemberRepository.save(member);
         return new JoinTeamResponse(
                 team.getOrganizationId(),
                 team.getOrganizationName(),

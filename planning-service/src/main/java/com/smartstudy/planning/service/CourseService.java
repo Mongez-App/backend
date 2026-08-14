@@ -19,12 +19,17 @@ import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.StudyBlock;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.model.TeamMember;
+import com.smartstudy.planning.processing.QdrantIndexingService;
+import com.smartstudy.planning.repository.ChatMessageRepository;
 import com.smartstudy.planning.repository.CourseRepository;
+import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.planning.repository.StudyBlockRepository;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.planning.repository.TeamMemberRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +47,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -61,6 +67,9 @@ public class CourseService {
     private final StudyBlockRepository studyBlockRepository;
     private final TaskRepository taskRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final EventRepository eventRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final QdrantIndexingService qdrantIndexingService;
     private final StudyPlannerAgent studyPlannerAgent;
     private final RestTemplateBuilder restTemplateBuilder;
     private final FileStorageService fileStorageService;
@@ -247,9 +256,25 @@ public class CourseService {
     public StatusResponse deleteCourse(String userId, UUID courseId) {
         log.info("Deleting course {} for userId: {}", courseId, userId);
         Course course = getOwnedCourse(userId, courseId);
+
+        List<Task> tasks = taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId);
+        if (!tasks.isEmpty()) {
+            chatMessageRepository.deleteAllByTaskIdIn(tasks.stream().map(Task::getId).toList());
+        }
+        eventRepository.deleteByUserIdAndCourseId(userId, courseId);
+        taskRepository.deleteAll(tasks);
         studyBlockRepository.deleteByCourseIdAndUserId(courseId, userId);
+
+        List<Material> materials = materialRepository.findByCourseIdAndUserIdOrderByUploadedAtAsc(courseId, userId);
+        for (Material material : materials) {
+            qdrantIndexingService.deleteByMaterialId(material.getId());
+        }
+        materialRepository.deleteAll(materials);
+        fileStorageService.deleteCourseDir(userId, courseId);
+
         courseRepository.delete(course);
-        return new StatusResponse("success", new AlertResponse(course.getName() + " and its roadmap blocks have been removed."));
+        return new StatusResponse("success", new AlertResponse(
+                course.getName() + " has been removed along with its materials, tasks, events, and roadmap."));
     }
 
     @Transactional(readOnly = true)
@@ -278,7 +303,10 @@ public class CourseService {
     @Transactional
     public MaterialResponse createMaterial(String userId, UUID courseId,
                                               MultipartFile file, int dailyStudyMinutes, String preferredDays) {
-        log.info("Creating material for course {} | userId: {} | fileName: {}", courseId, userId, file.getName());
+        String originalFileName = file.getOriginalFilename();
+        String materialName = (originalFileName == null || originalFileName.isBlank())
+                ? "material.pdf" : originalFileName;
+        log.info("Creating material for course {} | userId: {} | fileName: {}", courseId, userId, materialName);
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
         }
@@ -286,7 +314,7 @@ public class CourseService {
         Material material = Material.builder()
                 .courseId(courseId)
                 .userId(userId)
-                .name(file.getName())
+                .name(materialName)
                 .contentType(file.getContentType())
                 .fileSizeBytes(file.getSize())
                 .status(MaterialStatus.PENDING)
@@ -301,6 +329,7 @@ public class CourseService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
         }
 
+        saved.setPageCount(countPdfPages(fileStorageService.resolve(saved.getFilePath())));
         saved.setStatus(MaterialStatus.PROCESSING);
         materialRepository.save(saved);
         triggerAgentForMaterial(userId, courseId, saved.getId(), dailyStudyMinutes, preferredDays);
@@ -359,6 +388,9 @@ public class CourseService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL_UPLOAD_FAILED", ex);
         }
 
+        if (material.getPageCount() == null || material.getPageCount() <= 0) {
+            material.setPageCount(countPdfPages(fileStorageService.resolve(material.getFilePath())));
+        }
         material.setStatus(MaterialStatus.PROCESSING);
         material.setProcessingStartedAt(Instant.now());
         materialRepository.save(material);
@@ -405,11 +437,37 @@ public class CourseService {
     public StatusResponse deleteMaterial(String userId, UUID courseId, UUID materialId) {
         log.info("Deleting material {} from course {} | userId: {}", materialId, courseId, userId);
         getOwnedCourse(userId, courseId);
-        // Delete file from disk
+        Material material = materialRepository.findByIdAndUserId(materialId, userId)
+                .filter(m -> courseId.equals(m.getCourseId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "MATERIAL_NOT_FOUND"));
+
+        deleteTasksForMaterial(userId, materialId);
+        qdrantIndexingService.deleteByMaterialId(materialId);
         fileStorageService.delete(userId, courseId, materialId);
-        materialRepository.deleteByIdAndCourseIdAndUserId(materialId, courseId, userId);
+        materialRepository.delete(material);
         return new StatusResponse("success",
-                new AlertResponse("Study blocks linked to this material were removed from your roadmap."));
+                new AlertResponse("The material and its tasks were removed from your roadmap."));
+    }
+
+    private void deleteTasksForMaterial(String userId, UUID materialId) {
+        List<Task> tasks = taskRepository.findByMaterialIdAndUserId(materialId, userId);
+        if (tasks.isEmpty()) {
+            return;
+        }
+        List<UUID> taskIds = tasks.stream().map(Task::getId).toList();
+        chatMessageRepository.deleteAllByTaskIdIn(taskIds);
+        eventRepository.deleteByUserIdAndTaskIdIn(userId, taskIds);
+        studyBlockRepository.deleteByUserIdAndTaskIdIn(userId, taskIds);
+        taskRepository.deleteAll(tasks);
+    }
+
+    private Integer countPdfPages(Path pdfPath) {
+        try (PDDocument document = Loader.loadPDF(pdfPath.toFile())) {
+            return document.getNumberOfPages();
+        } catch (IOException ex) {
+            log.warn("Could not read page count from {}: {}", pdfPath, ex.getMessage());
+            return null;
+        }
     }
 
     public Course getOwnedCourse(String userId, UUID courseId) {

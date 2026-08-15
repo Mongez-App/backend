@@ -65,7 +65,7 @@ class EventServiceTest {
     // --- Non-course overlap ---
 
     @Test
-    void testNonCourseEvent_overlapsWithAnotherNonCourseEvent_throwsConflict() {
+    void testNonCourseEvent_overlapsWithAnotherNonCourseEvent_isSkipped() {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
         Event existing = createEvent("Existing", start, end, null);
@@ -77,7 +77,9 @@ class EventServiceTest {
                 new CreateEventRequest("New Event", start.toString(), end.toString(), "EXAM", false)
         ));
 
-        assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
+        EventsResponse response = eventService.createEvents(userId, request.events());
+        assertTrue(response.success());
+        assertEquals(0, response.createdCount());
     }
 
     @Test
@@ -133,7 +135,7 @@ class EventServiceTest {
     // --- System events ---
 
     @Test
-    void testSystemEvent_duplicateTitleAndDate_throwsConflict() {
+    void testSystemEvent_duplicateTitleAndDate_isSkipped() {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
         Event existing = createEvent("Holiday", start, end, null);
@@ -145,7 +147,9 @@ class EventServiceTest {
                 new CreateEventRequest("Holiday", start.toString(), end.toString(), "system", false)
         ));
 
-        assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
+        EventsResponse response = eventService.createEvents(userId, request.events());
+        assertTrue(response.success());
+        assertEquals(0, response.createdCount());
     }
 
     @Test
@@ -198,7 +202,7 @@ class EventServiceTest {
     // --- In-memory batch respects course scope ---
 
     @Test
-    void testInMemoryBatch_nonCourseEventsOverlap_throwsConflict() {
+    void testInMemoryBatch_nonCourseEventsOverlap_isSkipped() {
         Instant start = Instant.parse("2026-07-24T10:00:00Z");
         Instant end = Instant.parse("2026-07-24T11:00:00Z");
 
@@ -210,7 +214,33 @@ class EventServiceTest {
                 new CreateEventRequest("Event B", start.toString(), end.toString(), "EXAM", false)
         ));
 
-        assertThrows(ConflictException.class, () -> eventService.createEvents(userId, request.events()));
+        EventsResponse response = eventService.createEvents(userId, request.events());
+        assertTrue(response.success());
+        assertEquals(1, response.createdCount());
+        assertEquals("Event A", response.data().getFirst().title());
+    }
+
+    @Test
+    void testNonCourseEvent_overlapsWithExistingButSecondEventDoesNot_createsOnlySecond() {
+        Instant start = Instant.parse("2026-07-24T10:00:00Z");
+        Instant end = Instant.parse("2026-07-24T11:00:00Z");
+        Event existing = createEvent("Existing", start, end, null);
+
+        when(eventRepository.findOverlappingEvents(eq(userId), eq((UUID) null), eq(start), eq(end)))
+                .thenReturn(List.of(existing));
+
+        Instant start2 = Instant.parse("2026-07-24T12:00:00Z");
+        Instant end2 = Instant.parse("2026-07-24T13:00:00Z");
+
+        CreateEventsRequest request = new CreateEventsRequest(List.of(
+                new CreateEventRequest("Overlapping Event", start.toString(), end.toString(), "EXAM", false),
+                new CreateEventRequest("Valid Event", start2.toString(), end2.toString(), "EXAM", false)
+        ));
+
+        EventsResponse response = eventService.createEvents(userId, request.events());
+        assertTrue(response.success());
+        assertEquals(1, response.createdCount());
+        assertEquals("Valid Event", response.data().getFirst().title());
     }
 
     // --- Helpers ---

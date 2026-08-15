@@ -2,6 +2,7 @@ package com.smartstudy.planning.controller;
 
 import com.smartstudy.planning.dto.response.RoadmapResponse;
 import com.smartstudy.planning.service.RoadmapService;
+import com.smartstudy.planning.service.UserPreferencesService;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class RoadmapController {
 
     private static final Logger log = LoggerFactory.getLogger(RoadmapController.class);
     private final RoadmapService roadmapService;
+    private final UserPreferencesService userPreferencesService;
 
     @GetMapping("/weekly")
     public RoadmapResponse getWeeklyRoadmap(
@@ -40,7 +42,9 @@ public class RoadmapController {
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         validateUserId(userId);
         log.info("Incoming request: POST /roadmap/reschedule | userId: {}", userId);
-        return roadmapService.reschedule(userId, dailyStudyMinutes, preferredDays);
+        UserPreferencesService.StudyPreferences preferences =
+                userPreferencesService.resolve(userId, dailyStudyMinutes, preferredDays);
+        return roadmapService.reschedule(userId, preferences.dailyStudyMinutes(), preferences.preferredDays());
     }
 
     private void validateUserId(String userId) {

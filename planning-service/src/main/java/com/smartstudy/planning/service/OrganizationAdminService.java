@@ -129,17 +129,19 @@ public class OrganizationAdminService {
                 .imageUrl(request.photoUrl())
                 .inviteCode(generateUniqueInviteCode())
                 .build();
-        teamRepository.save(team);
+        // Team has an assigned id, so save() merges: @PrePersist timestamps land on
+        // the returned managed copy, not on the instance built above.
+        Team saved = teamRepository.save(team);
         return new OrgTeamResponse(
-                team.getId(),
-                team.getName(),
-                team.getImageUrl(),
-                team.getOwnerId(),
+                saved.getId(),
+                saved.getName(),
+                saved.getImageUrl(),
+                saved.getOwnerId(),
                 0L,
                 0,
                 List.of(),
-                team.getCreatedAt(),
-                team.getUpdatedAt());
+                saved.getCreatedAt(),
+                saved.getUpdatedAt());
     }
 
     public OrgFileUploadResponse uploadTeamPhoto(String orgId, MultipartFile file) {

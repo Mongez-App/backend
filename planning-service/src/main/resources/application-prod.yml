@@ -5,7 +5,7 @@ spring:
     password: ${POSTGRES_PASSWORD:smartstudy}
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
 
 eureka:
   client:
@@ -14,3 +14,15 @@ eureka:
   instance:
     prefer-ip-address: false
     hostname: ${EUREKA_INSTANCE_HOSTNAME:planning-service.railway.internal}
+
+# Uploaded PDFs must live on the mounted Railway volume, not the container's
+# own filesystem, which is recreated on every deploy.
+storage:
+  materials:
+    base-dir: ${MATERIAL_STORAGE_DIR:/data/materials}
+
+# Qdrant runs as its own Railway service (with its own volume) and is reached
+# over the private network.
+qdrant:
+  host: ${QDRANT_HOST:qdrant.railway.internal}
+  port: ${QDRANT_PORT:6334}

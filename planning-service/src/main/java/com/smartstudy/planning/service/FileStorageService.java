@@ -46,6 +46,47 @@ public class FileStorageService {
     }
 
     /**
+     * Save a file that is not attached to a course yet:
+     * {baseDir}/{userId}/unattached/{materialId}.pdf
+     */
+    public String saveUnattached(String userId, UUID materialId, InputStream input) throws IOException {
+        Path dir = baseDir.resolve(userId).resolve("unattached");
+        Files.createDirectories(dir);
+        Path filePath = dir.resolve(materialId + ".pdf");
+        Files.copy(input, filePath, StandardCopyOption.REPLACE_EXISTING);
+        String relativePath = baseDir.relativize(filePath).toString();
+        log.info("Saved unattached material file: {}", relativePath);
+        return relativePath;
+    }
+
+    /**
+     * Move a stored file into a course directory (used when a material is
+     * linked to a course). Returns the new relative path, or the old one when
+     * the move is impossible so the stored filePath keeps resolving.
+     */
+    public String moveToCourse(String relativePath, String userId, UUID courseId, UUID materialId) {
+        Path source = baseDir.resolve(relativePath);
+        if (Files.notExists(source)) {
+            return relativePath;
+        }
+        try {
+            Path dir = baseDir.resolve(userId).resolve(courseId.toString());
+            Files.createDirectories(dir);
+            Path target = dir.resolve(materialId + ".pdf");
+            if (source.equals(target)) {
+                return relativePath;
+            }
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            String newRelative = baseDir.relativize(target).toString();
+            log.info("Moved material file {} -> {}", relativePath, newRelative);
+            return newRelative;
+        } catch (IOException e) {
+            log.warn("Failed to move material file {}: {}", relativePath, e.getMessage());
+            return relativePath;
+        }
+    }
+
+    /**
      * Get the absolute Path to a stored material file.
      */
     public Path load(String userId, UUID courseId, UUID materialId) {

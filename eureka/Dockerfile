@@ -12,6 +12,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/eureka/target/eureka-*.jar app.jar
 EXPOSE 8761
-# Default to dev profile. Railway env vars override when set.
-ENV SPRING_PROFILES_ACTIVE=dev
+# Default to prod profile for Railway deployment.
+ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "app.jar"]

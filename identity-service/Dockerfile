@@ -10,6 +10,6 @@ WORKDIR /app
 COPY --from=build /app/identity-service/target/identity-service-*.jar app.jar
 COPY --from=build /app/credentials /app/credentials
 EXPOSE 8081
-# Default to dev profile. Railway env vars override when set.
-ENV SPRING_PROFILES_ACTIVE=dev
+# Default to prod profile for Railway deployment.
+ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "app.jar"]

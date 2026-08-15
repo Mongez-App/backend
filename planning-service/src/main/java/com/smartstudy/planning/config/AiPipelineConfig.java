@@ -64,7 +64,6 @@ public class AiPipelineConfig {
 
     @Bean
     public QdrantClient qdrantClient(QdrantProperties props) {
-        log.info("Configuring Qdrant gRPC client — host: {}, port: {}", props.host(), props.port());
         return new QdrantClient(
                 QdrantGrpcClient.newBuilder(props.host(), props.port(), false).build()
         );

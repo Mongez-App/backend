@@ -2,6 +2,7 @@ package com.smartstudy.planning.service;
 
 import com.smartstudy.planning.dto.response.DashboardResponse;
 import com.smartstudy.planning.model.Course;
+import com.smartstudy.planning.model.StudySession;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -31,6 +33,7 @@ public class DashboardService {
     private final CourseRepository courseRepository;
     private final EventRepository eventRepository;
     private final StudySessionRepository studySessionRepository;
+    private final UserPreferencesService userPreferencesService;
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(String userId) {
@@ -53,13 +56,17 @@ public class DashboardService {
                 formatDuration((int) todayMinutes),
                 (int) todayMinutes);
 
+        // Goals come from the user's saved preferences (daily hours x chosen days),
+        // so they track whatever was set at onboarding or later edited in the profile.
+        UserPreferencesService.StudyPreferences preferences = userPreferencesService.resolve(userId);
+
         DashboardResponse.ProgressMetricsResponse metrics = new DashboardResponse.ProgressMetricsResponse(
                 todayCompleted,
                 todayTasks.size(),
                 loggedHours(userId, today.minusDays(6), today),
-                20,
+                preferences.weeklyGoalHours(),
                 loggedHours(userId, today.withDayOfMonth(1), today),
-                80);
+                preferences.monthlyGoalHours(YearMonth.from(today)));
 
         List<DashboardResponse.DashboardTaskResponse> taskResponses = todayTasks.stream()
                 .map(task -> new DashboardResponse.DashboardTaskResponse(task.getId(), task.getTitle(),
@@ -154,11 +161,14 @@ public class DashboardService {
     private long loggedHours(String userId, LocalDate start, LocalDate end) {
         Instant from = start.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant to = end.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
-        return studySessionRepository.findByUserIdAndEndedAtBetween(userId, from, to)
+        // Total the minutes first: converting each session individually discards
+        // every remainder, so several sub-hour sessions would report zero hours.
+        long loggedMinutes = studySessionRepository.findByUserIdAndEndedAtBetween(userId, from, to)
                 .stream()
                 .filter(session -> session.getDurationMinutesLogged() != null)
-                .mapToLong(session -> session.getDurationMinutesLogged() / 60)
+                .mapToLong(StudySession::getDurationMinutesLogged)
                 .sum();
+        return loggedMinutes / 60;
     }
 
     private String dueText(Instant dueDate) {

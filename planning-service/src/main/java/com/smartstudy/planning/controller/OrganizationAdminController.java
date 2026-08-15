@@ -134,7 +134,7 @@ public class OrganizationAdminController {
     public OrgMaterialResponse uploadCourseMaterial(
             @RequestHeader(value = "X-User-Id", required = false) String orgId,
             @RequestPart("file") MultipartFile file,
-            @RequestParam("courseId") UUID courseId) {
+            @RequestParam(value = "courseId", required = false) UUID courseId) {
         log.info("Incoming request: POST /organization/uploadCourseMaterial | orgId: {} | courseId: {}", orgId, courseId);
         return organizationAdminService.uploadCourseMaterial(requireOrg(orgId), courseId, file);
     }

@@ -31,7 +31,9 @@ public class Material {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    // Nullable: org-admin uploads may exist before any course and get linked
+    // to one later via createCourse.materialIds.
+    @Column
     private UUID courseId;
 
     @Column(nullable = false)

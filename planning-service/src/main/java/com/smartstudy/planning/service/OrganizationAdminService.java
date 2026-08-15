@@ -300,6 +300,10 @@ public class OrganizationAdminService {
                 throw OrgApiException.forbidden("You do not have permission to attach this material.");
             }
             material.setCourseId(courseId);
+            if (material.getFilePath() != null && !material.getFilePath().isBlank()) {
+                material.setFilePath(fileStorageService.moveToCourse(
+                        material.getFilePath(), orgId, courseId, material.getId()));
+            }
         }
         materialRepository.saveAll(materials);
         return materials.size();
@@ -307,8 +311,10 @@ public class OrganizationAdminService {
 
     @Transactional
     public OrgMaterialResponse uploadCourseMaterial(String orgId, UUID courseId, MultipartFile file) {
-        log.info("Org {} uploading material to course {}: {}", orgId, courseId, file.getOriginalFilename());
-        requireOrgCourse(orgId, courseId);
+        log.info("Org {} uploading material {} | courseId: {}", orgId, file.getOriginalFilename(), courseId);
+        if (courseId != null) {
+            requireOrgCourse(orgId, courseId);
+        }
         if (file.isEmpty()) {
             throw OrgApiException.validation("Uploaded file is empty.");
         }
@@ -320,10 +326,12 @@ public class OrganizationAdminService {
         }
         String fileName = (file.getOriginalFilename() == null || file.getOriginalFilename().isBlank())
                 ? "material.pdf" : file.getOriginalFilename();
-        boolean duplicate = materialRepository.findByCourseId(courseId).stream()
-                .anyMatch(m -> fileName.equalsIgnoreCase(m.getName()));
-        if (duplicate) {
-            throw OrgApiException.conflict("A material with this filename already exists in this course.");
+        if (courseId != null) {
+            boolean duplicate = materialRepository.findByCourseId(courseId).stream()
+                    .anyMatch(m -> fileName.equalsIgnoreCase(m.getName()));
+            if (duplicate) {
+                throw OrgApiException.conflict("A material with this filename already exists in this course.");
+            }
         }
 
         // Status READY from the start: org materials are shared content, not input
@@ -339,7 +347,9 @@ public class OrganizationAdminService {
         Material saved = materialRepository.save(material);
 
         try {
-            String filePath = fileStorageService.save(orgId, courseId, saved.getId(), file.getInputStream());
+            String filePath = courseId != null
+                    ? fileStorageService.save(orgId, courseId, saved.getId(), file.getInputStream())
+                    : fileStorageService.saveUnattached(orgId, saved.getId(), file.getInputStream());
             saved.setFilePath(filePath);
         } catch (IOException ex) {
             throw new OrgApiException(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
@@ -368,9 +378,14 @@ public class OrganizationAdminService {
     public Path resolveMaterialFile(UUID materialId) {
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> OrgApiException.notFound("Material with the given ID was not found."));
-        Path path = material.getFilePath() != null && !material.getFilePath().isBlank()
-                ? fileStorageService.resolve(material.getFilePath())
-                : fileStorageService.load(material.getUserId(), material.getCourseId(), material.getId());
+        Path path;
+        if (material.getFilePath() != null && !material.getFilePath().isBlank()) {
+            path = fileStorageService.resolve(material.getFilePath());
+        } else if (material.getCourseId() != null) {
+            path = fileStorageService.load(material.getUserId(), material.getCourseId(), material.getId());
+        } else {
+            throw OrgApiException.notFound("Material file was not found on the server.");
+        }
         if (Files.notExists(path)) {
             throw OrgApiException.notFound("Material file was not found on the server.");
         }

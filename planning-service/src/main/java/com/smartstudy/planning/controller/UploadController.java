@@ -2,6 +2,7 @@ package com.smartstudy.planning.controller;
 
 import com.smartstudy.planning.dto.response.UploadMaterialResponse;
 import com.smartstudy.planning.service.CourseService;
+import com.smartstudy.planning.service.UserPreferencesService;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ public class UploadController {
 
     private static final Logger log = LoggerFactory.getLogger(UploadController.class);
     private final CourseService courseService;
+    private final UserPreferencesService userPreferencesService;
 
     /**
      * Step 2 of two-step upload: upload the binary PDF file for a PENDING material.
@@ -35,7 +37,10 @@ public class UploadController {
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         log.info("Incoming request: POST /upload/{} | userId: {}", materialId, userId);
         validateUserId(userId);
-        return courseService.uploadMaterialFile(userId, materialId, file, dailyStudyMinutes, preferredDays);
+        UserPreferencesService.StudyPreferences preferences =
+                userPreferencesService.resolve(userId, dailyStudyMinutes, preferredDays);
+        return courseService.uploadMaterialFile(userId, materialId, file,
+                preferences.dailyStudyMinutes(), preferences.preferredDays());
     }
 
     private void validateUserId(String userId) {

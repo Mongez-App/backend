@@ -4,12 +4,14 @@ import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.CreateMaterialRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
 import com.smartstudy.planning.dto.response.*;
-import com.smartstudy.planning.service.CourseService;
 import com.smartstudy.planning.dto.response.TaskResponse;
 import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.response.AlertResponse;
+import com.smartstudy.planning.service.CourseService;
 import com.smartstudy.planning.service.EventService;
 import com.smartstudy.planning.service.TaskService;
+import com.smartstudy.planning.service.UserPreferencesService;
+import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.validation.Valid;
@@ -35,6 +37,8 @@ public class CourseController {
     private final CourseService courseService;
     private final TaskService taskService;
     private final EventService eventService;
+    private final TaskRepository taskRepository;
+    private final UserPreferencesService userPreferencesService;
 
     @GetMapping
     public List<CourseResponse> getCourses(@RequestHeader("X-User-Id") String userId) {
@@ -60,7 +64,10 @@ public class CourseController {
             @RequestHeader(value = "X-Daily-Study-Minutes", defaultValue = "60") int dailyStudyMinutes) {
         log.info("Incoming request: POST /courses | userId: {}", userId);
         validateUserId(userId);
-        return courseService.createCourse(userId, request, dailyStudyMinutes);
+        UserPreferencesService.StudyPreferences preferences =
+                userPreferencesService.resolve(userId, dailyStudyMinutes, UserPreferencesService.DEFAULT_PREFERRED_DAYS);
+        return courseService.createCourse(userId, request,
+                preferences.dailyStudyMinutes(), preferences.schedulingDays());
     }
 
     @PatchMapping("/{courseId}")
@@ -92,13 +99,23 @@ public class CourseController {
     }
 
     @GetMapping("/{courseId}/tasks")
-    public List<TaskResponse> getCourseTasks(
+    public TasksMetaResponse getCourseTasks(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID courseId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        log.info("Incoming request: GET /courses/{}/tasks | userId: {} | date: {}", courseId, userId, date);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "120") Integer preferredStudyTimeMinutes) {
+        log.info("Incoming request: GET /courses/{}/tasks | userId: {} | date: {} | preferredStudyTimeMinutes: {}", courseId, userId, date, preferredStudyTimeMinutes);
         validateUserId(userId);
-        return taskService.getTasksByCourse(userId, courseId, date);
+        List<TaskResponse> tasks = taskService.getTasksByCourse(userId, courseId, date);
+        long totalTasks = taskRepository.countByUserIdAndCourseId(userId, courseId);
+        // The query param is only a fallback; the user's saved daily budget wins.
+        int studyTimeMinutes = userPreferencesService
+                .resolve(userId, preferredStudyTimeMinutes, UserPreferencesService.DEFAULT_PREFERRED_DAYS)
+                .dailyStudyMinutes();
+        return new TasksMetaResponse(
+                new TasksMeta(studyTimeMinutes, (int) totalTasks),
+                tasks
+        );
     }
 
     @PostMapping(value = "/{courseId}/materials", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -111,7 +128,10 @@ public class CourseController {
             @RequestHeader(value = "X-Preferred-Days", defaultValue = "MON,TUE,WED,THU,FRI,SAT,SUN") String preferredDays) {
         log.info("Incoming request: POST /courses/{}/materials (multipart) | userId: {}", courseId, userId);
         validateUserId(userId);
-        return courseService.createMaterial(userId, courseId, file, dailyStudyMinutes, preferredDays);
+        UserPreferencesService.StudyPreferences preferences =
+                userPreferencesService.resolve(userId, dailyStudyMinutes, preferredDays);
+        return courseService.createMaterial(userId, courseId, file,
+                preferences.dailyStudyMinutes(), preferences.preferredDays());
     }
 
     @PostMapping(value = "/{courseId}/materials", consumes = MediaType.APPLICATION_JSON_VALUE)

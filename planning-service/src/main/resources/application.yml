@@ -1,6 +1,10 @@
 spring:
   application:
     name: planning-service
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   servlet:
     multipart:
       max-file-size: 50MB

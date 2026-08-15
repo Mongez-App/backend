@@ -31,6 +31,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.time.temporal.ChronoUnit.DAYS;
+
 @Service
 @RequiredArgsConstructor
 public class TeamService {
@@ -55,9 +57,30 @@ public class TeamService {
                 .toList();
     }
 
+    public List<TeamResponse> getUserTeams(String userId) {
+        log.info("Fetching all teams for userId: {}", userId);
+        List<TeamMember> memberships = teamMemberRepository.findByUserIdAndStatus(userId, TeamMemberStatus.ACCEPTED);
+        return memberships.stream()
+                .map(TeamMember::getTeamId)
+                .map(teamId -> teamRepository.findById(teamId).orElse(null))
+                .filter(Objects::nonNull)
+                .map(team -> toTeamResponse(team, userId))
+                .toList();
+    }
+
     public List<TeamCourseResponse> getTeamCourses(String teamId, String userId, String orgId) {
         log.info("Fetching courses for team: {} | userId: {} | org: {}", teamId, userId, orgId);
         validateTeamInOrg(teamId, orgId);
+        ensureMember(teamId, userId);
+        List<Course> courses = courseRepository.findByTeamIdAndHiddenFalse(teamId);
+        return courses.stream()
+                .map(course -> toTeamCourseResponse(course, userId))
+                .toList();
+    }
+
+    public List<TeamCourseResponse> getTeamCourses(String teamId, String userId) {
+        log.info("Fetching courses for team: {} | userId: {}", teamId, userId);
+        Team team = resolveTeam(teamId);
         ensureMember(teamId, userId);
         List<Course> courses = courseRepository.findByTeamIdAndHiddenFalse(teamId);
         return courses.stream()
@@ -69,25 +92,14 @@ public class TeamService {
         log.info("Fetching events for team: {} | userId: {} | org: {}", teamId, userId, orgId);
         validateTeamInOrg(teamId, orgId);
         ensureMember(teamId, userId);
-        List<Course> courses = courseRepository.findByTeamId(teamId);
-        List<UUID> courseIds = courses.stream().map(Course::getId).toList();
-        if (courseIds.isEmpty()) {
-            return List.of();
-        }
-        List<Event> events = eventRepository.findByCourseIdInAndTaskIdIsNull(courseIds);
-        Map<UUID, String> courseNameMap = courses.stream().collect(Collectors.toMap(Course::getId, Course::getName));
-        return events.stream()
-                .map(event -> {
-                    String courseName = courseNameMap.get(event.getCourseId());
-                    return new TeamEventResponse(
-                            event.getId(),
-                            courseName,
-                            event.getEventType(),
-                            dueText(event.getStartDate()),
-                            event.getStartDate()
-                    );
-                })
-                .toList();
+        return buildTeamEvents(teamId, userId);
+    }
+
+    public List<TeamEventResponse> getTeamEvents(String teamId, String userId) {
+        log.info("Fetching events for team: {} | userId: {}", teamId, userId);
+        resolveTeam(teamId);
+        ensureMember(teamId, userId);
+        return buildTeamEvents(teamId, userId);
     }
 
     public DiscoverResponse discover(String userId, String orgId) {
@@ -136,6 +148,50 @@ public class TeamService {
         return new DiscoverResponse(pendingRequests, trendingTeams);
     }
 
+    public DiscoverResponse discover(String userId) {
+        log.info("Discovering for userId: {} across all orgs", userId);
+        List<TeamMember> allMemberships = teamMemberRepository.findByUserIdAndStatusIn(
+                userId, List.of(TeamMemberStatus.PENDING, TeamMemberStatus.ACCEPTED));
+        Set<String> userTeamIds = allMemberships.stream()
+                .map(TeamMember::getTeamId)
+                .collect(Collectors.toSet());
+
+        List<PendingRequestResponse> pendingRequests = allMemberships.stream()
+                .filter(m -> m.getStatus() == TeamMemberStatus.PENDING)
+                .map(TeamMember::getTeamId)
+                .map(teamId -> teamRepository.findById(teamId).orElse(null))
+                .filter(Objects::nonNull)
+                .map(team -> {
+                    TeamMember member = allMemberships.stream()
+                            .filter(m -> team.getId().equals(m.getTeamId()))
+                            .findFirst()
+                            .orElse(null);
+                    return new PendingRequestResponse(
+                            team.getId(),
+                            team.getName(),
+                            team.getImageUrl(),
+                            team.getOrganizationName(),
+                            member != null ? member.getCreatedAt() : Instant.now(),
+                            "pending"
+                    );
+                })
+                .toList();
+
+        List<TrendingTeamResponse> trendingTeams = teamRepository.findAll().stream()
+                .filter(team -> !userTeamIds.contains(team.getId()))
+                .limit(10)
+                .map(team -> new TrendingTeamResponse(
+                        team.getId(),
+                        team.getName(),
+                        team.getImageUrl(),
+                        team.getOrganizationName(),
+                        "NOT_A_MEMBER"
+                ))
+                .toList();
+
+        return new DiscoverResponse(pendingRequests, trendingTeams);
+    }
+
     public List<SearchTeamResponse> searchTeams(String query, String userId, String orgId) {
         log.info("Searching teams for query: {} | userId: {} | org: {}", query, userId, orgId);
         String needle = query.toLowerCase();
@@ -154,11 +210,44 @@ public class TeamService {
         return teams.stream()
                 .map(team -> {
                     TeamMember member = membershipMap.get(team.getId());
-                    String status = switch (member != null ? member.getStatus() : null) {
+                    String status = member != null ? switch (member.getStatus()) {
                         case ACCEPTED -> "ALREADY_A_MEMBER";
                         case PENDING -> "PENDING";
                         default -> "NOT_A_MEMBER";
-                    };
+                    } : "NOT_A_MEMBER";
+                    return new SearchTeamResponse(
+                            team.getId(),
+                            team.getName(),
+                            team.getOrganizationName(),
+                            status,
+                            team.getImageUrl()
+                    );
+                })
+                .toList();
+    }
+
+    public List<SearchTeamResponse> searchTeams(String query, String userId) {
+        log.info("Searching teams for query: {} | userId: {}", query, userId);
+        String needle = query.toLowerCase();
+        List<Team> teams = teamRepository.findAll().stream()
+                .filter(team -> team.getName().toLowerCase().contains(needle)
+                        || (team.getOrganizationName() != null
+                                && team.getOrganizationName().toLowerCase().contains(needle)))
+                .toList();
+
+        List<TeamMember> allMemberships = teamMemberRepository.findByUserIdAndStatusIn(
+                userId, List.of(TeamMemberStatus.PENDING, TeamMemberStatus.ACCEPTED));
+        Map<String, TeamMember> membershipMap = allMemberships.stream()
+                .collect(Collectors.toMap(TeamMember::getTeamId, m -> m));
+
+        return teams.stream()
+                .map(team -> {
+                    TeamMember member = membershipMap.get(team.getId());
+                    String status = member != null ? switch (member.getStatus()) {
+                        case ACCEPTED -> "ALREADY_A_MEMBER";
+                        case PENDING -> "PENDING";
+                        default -> "NOT_A_MEMBER";
+                    } : "NOT_A_MEMBER";
                     return new SearchTeamResponse(
                             team.getId(),
                             team.getName(),
@@ -177,36 +266,14 @@ public class TeamService {
         if (!orgId.equals(team.getOrganizationId())) {
             throw new BadRequestException("ORG_MISMATCH", "Team does not belong to the specified organization.");
         }
-        Optional<TeamMember> existing = teamMemberRepository.findByTeamIdAndUserId(team.getId(), userId);
-        if (existing.isPresent()) {
-            TeamMemberStatus status = existing.get().getStatus();
-            if (status == TeamMemberStatus.ACCEPTED) {
-                throw new ConflictException("ALREADY_A_MEMBER", "You are already a member of this team.");
-            }
-            if (status == TeamMemberStatus.PENDING) {
-                throw new ConflictException("PENDING_REQUEST_EXISTS", "Your join request is pending.");
-            }
-            // Previously rejected: re-apply on the same membership row instead of
-            // inserting a duplicate.
-            TeamMember member = existing.get();
-            member.setStatus(TeamMemberStatus.PENDING);
-            teamMemberRepository.save(member);
-        } else {
-            TeamMember member = TeamMember.builder()
-                    .teamId(team.getId())
-                    .userId(userId)
-                    .status(TeamMemberStatus.PENDING)
-                    .build();
-            teamMemberRepository.save(member);
-        }
-        return new JoinTeamResponse(
-                team.getOrganizationId(),
-                team.getOrganizationName(),
-                team.getId(),
-                team.getName(),
-                "pending",
-                "Join request submitted. Awaiting admin approval."
-        );
+        return createOrUpdateMembership(userId, team);
+    }
+
+    public JoinTeamResponse joinTeam(String userId, String inviteCode) {
+        log.info("Joining team with invite code: {} | userId: {}", inviteCode, userId);
+        Team team = teamRepository.findByInviteCode(inviteCode)
+                .orElseThrow(() -> new BadRequestException("INVALID_INVITE_CODE", "Invalid invite code."));
+        return createOrUpdateMembership(userId, team);
     }
 
     public TeamResponse createTeam(String userId, String orgId, CreateTeamRequest request) {
@@ -254,6 +321,42 @@ public class TeamService {
         }
     }
 
+    private Team resolveTeam(String teamId) {
+        return teamRepository.findById(teamId)
+                .orElseThrow(() -> new NotFoundException("TEAM_NOT_FOUND", "Team not found."));
+    }
+
+    private JoinTeamResponse createOrUpdateMembership(String userId, Team team) {
+        Optional<TeamMember> existing = teamMemberRepository.findByTeamIdAndUserId(team.getId(), userId);
+        if (existing.isPresent()) {
+            TeamMemberStatus status = existing.get().getStatus();
+            if (status == TeamMemberStatus.ACCEPTED) {
+                throw new ConflictException("ALREADY_A_MEMBER", "You are already a member of this team.");
+            }
+            if (status == TeamMemberStatus.PENDING) {
+                throw new ConflictException("PENDING_REQUEST_EXISTS", "Your join request is pending.");
+            }
+            TeamMember member = existing.get();
+            member.setStatus(TeamMemberStatus.PENDING);
+            teamMemberRepository.save(member);
+        } else {
+            TeamMember member = TeamMember.builder()
+                    .teamId(team.getId())
+                    .userId(userId)
+                    .status(TeamMemberStatus.PENDING)
+                    .build();
+            teamMemberRepository.save(member);
+        }
+        return new JoinTeamResponse(
+                team.getOrganizationId(),
+                team.getOrganizationName(),
+                team.getId(),
+                team.getName(),
+                "pending",
+                "Join request submitted. Awaiting admin approval."
+        );
+    }
+
     private String generateUniqueInviteCode() {
         String code;
         do {
@@ -276,7 +379,7 @@ public class TeamService {
         List<TeamEventSummary> eventSummaries = List.of();
         if (!courseIds.isEmpty()) {
             Instant now = Instant.now();
-            Instant limit = now.plus(7, java.time.temporal.ChronoUnit.DAYS);
+            Instant limit = now.plus(7, DAYS);
             List<Event> events = eventRepository.findByCourseIdInAndTaskIdIsNull(courseIds).stream()
                     .filter(e -> !e.getStartDate().isAfter(limit))
                     .toList();
@@ -298,6 +401,28 @@ public class TeamService {
         );
     }
 
+    private List<TeamEventResponse> buildTeamEvents(String teamId, String userId) {
+        List<Course> courses = courseRepository.findByTeamId(teamId);
+        List<UUID> courseIds = courses.stream().map(Course::getId).toList();
+        if (courseIds.isEmpty()) {
+            return List.of();
+        }
+        List<Event> events = eventRepository.findByCourseIdInAndTaskIdIsNull(courseIds);
+        Map<UUID, String> courseNameMap = courses.stream().collect(Collectors.toMap(Course::getId, Course::getName));
+        return events.stream()
+                .map(event -> {
+                    String courseName = courseNameMap.get(event.getCourseId());
+                    return new TeamEventResponse(
+                            event.getId(),
+                            courseName,
+                            event.getEventType(),
+                            dueText(event.getStartDate()),
+                            event.getStartDate()
+                    );
+                })
+                .toList();
+    }
+
     private TeamCourseResponse toTeamCourseResponse(Course course, String userId) {
         return new TeamCourseResponse(
                 course.getId(),
@@ -306,7 +431,7 @@ public class TeamService {
                 course.getName(),
                 course.getCourseCode(),
                 course.getStartDate(),
-                course.getExamDate(),
+                course.getEndDate(),
                 course.getImageUrl(),
                 completionPercentageForCourse(course.getId(), userId)
         );

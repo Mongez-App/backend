@@ -83,11 +83,11 @@ public class EventService {
                 }
 
                 if ("system".equals(request.eventType())) {
-                    eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(userId, "system", request.title(), startInstant)
-                            .ifPresent(existing -> {
-                                throw new ConflictException("SYSTEM_EVENT_DUPLICATE",
-                                        "Event '" + request.title() + "' already exists on " + startInstant + ".");
-                            });
+                    boolean isDuplicate = !eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(userId, "system", request.title(), startInstant).isEmpty();
+                    if (isDuplicate) {
+                        log.warn("Skipping duplicate system event '{}' for user {} on {}", request.title(), userId, startInstant);
+                        continue;
+                    }
                     Event event = Event.builder()
                             .userId(userId)
                             .title(request.title())
@@ -103,15 +103,20 @@ public class EventService {
 
                 List<Event> overlapping = eventRepository.findOverlappingEvents(userId, null, startInstant, endInstant);
                 if (!overlapping.isEmpty()) {
-                    throw new ConflictException("OVERLAP_EVENT",
-                            "Event '" + request.title() + "' overlaps with existing event: " + overlapping.getFirst().getTitle());
+                    log.warn("Skipping overlapping event '{}' for user {} (overlaps with '{}')", request.title(), userId, overlapping.getFirst().getTitle());
+                    continue;
                 }
 
+                boolean overlapsWithBatch = false;
                 for (Instant[] range : validatedRanges) {
                     if (rangesOverlap(range[0], range[1], null, startInstant, endInstant, null)) {
-                        throw new ConflictException("OVERLAP_EVENT",
-                                "Event '" + request.title() + "' overlaps with another event in the same request.");
+                        overlapsWithBatch = true;
+                        break;
                     }
+                }
+                if (overlapsWithBatch) {
+                    log.warn("Skipping event '{}' for user {} (overlaps with another event in same request)", request.title(), userId);
+                    continue;
                 }
                 validatedRanges.add(new Instant[]{startInstant, endInstant});
 

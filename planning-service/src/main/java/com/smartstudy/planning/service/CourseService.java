@@ -48,12 +48,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -96,7 +98,8 @@ public class CourseService {
     }
 
     @Transactional
-    public CourseResponse createCourse(String userId, CreateCourseRequest request, int dailyStudyMinutes) {
+    public CourseResponse createCourse(String userId, CreateCourseRequest request, int dailyStudyMinutes,
+                                       Set<DayOfWeek> preferredDays) {
         CourseType courseType = request.courseType() != null ? request.courseType() : CourseType.MATERIAL_COURSE;
         String materialUrl = request.materialUrl();
 
@@ -125,7 +128,8 @@ public class CourseService {
         Course saved = courseRepository.save(course);
 
         if (scraperResources != null && !scraperResources.isEmpty()) {
-            importUrlCourseResources(userId, saved.getId(), saved.getStartDate().atZone(ZoneOffset.UTC).toLocalDate(), dailyStudyMinutes, scraperResources);
+            importUrlCourseResources(userId, saved.getId(), saved.getStartDate().atZone(ZoneOffset.UTC).toLocalDate(),
+                    dailyStudyMinutes, preferredDays, scraperResources);
         }
 
         createInitialStudyBlock(userId, saved);
@@ -163,9 +167,11 @@ public class CourseService {
         }
     }
 
-    private void importUrlCourseResources(String userId, UUID courseId, LocalDate startDate, int dailyStudyMinutes, List<ScraperImportResponse.ScraperResource> resources) {
+    private void importUrlCourseResources(String userId, UUID courseId, LocalDate startDate, int dailyStudyMinutes,
+                                          Set<DayOfWeek> preferredDays, List<ScraperImportResponse.ScraperResource> resources) {
         int effectiveMax = Math.min(maxSplitMinutes, dailyStudyMinutes);
         int sequenceOrder = 0;
+        LocalDate firstStudyDay = nextPreferredDay(startDate, preferredDays);
 
         for (ScraperImportResponse.ScraperResource resource : resources) {
             int duration = resource.getDuration();
@@ -179,7 +185,7 @@ public class CourseService {
                         .durationMinutes(duration)
                         .priority(Priority.MEDIUM)
                         .completed(false)
-                        .scheduledDate(startDate)
+                        .scheduledDate(firstStudyDay)
                         .sequenceOrder(sequenceOrder++)
                         .locked(false)
                         .missed(false)
@@ -188,14 +194,14 @@ public class CourseService {
                 int remaining = duration;
                 int partNumber = 0;
                 int totalParts = (int) Math.ceil((double) duration / effectiveMax);
-                LocalDate currentDate = startDate;
+                LocalDate currentDate = firstStudyDay;
                 int dayRemaining = dailyStudyMinutes;
 
                 while (remaining > 0) {
                     int chunk = Math.min(remaining, effectiveMax);
 
                     if (chunk > dayRemaining) {
-                        currentDate = currentDate.plusDays(1);
+                        currentDate = nextPreferredDay(currentDate.plusDays(1), preferredDays);
                         dayRemaining = dailyStudyMinutes;
                     }
 
@@ -219,6 +225,24 @@ public class CourseService {
                 }
             }
         }
+    }
+
+    /**
+     * First date on or after {@code from} that falls on one of the user's preferred
+     * study days, so imported tasks never land on a day the user excluded.
+     */
+    private LocalDate nextPreferredDay(LocalDate from, Set<DayOfWeek> preferredDays) {
+        if (preferredDays == null || preferredDays.isEmpty()) {
+            return from;
+        }
+        LocalDate candidate = from;
+        for (int i = 0; i < 7; i++) {
+            if (preferredDays.contains(candidate.getDayOfWeek())) {
+                return candidate;
+            }
+            candidate = candidate.plusDays(1);
+        }
+        return from;
     }
 
     @Transactional

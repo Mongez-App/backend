@@ -6,10 +6,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
-  ai:
-    google:
-      genai:
-        api-key: ${SPRING_AI_GOOGLE_GEMINI_API_KEY:AQ.Ab8RN6Jbj7pNOghKahel8kjLenveDQvI0X0dZDjgOSaEGc7Niw}
 
 eureka:
   client:
@@ -18,13 +14,3 @@ eureka:
   instance:
     hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
     prefer-ip-address: ${EUREKA_PREFER_IP:true}
-
-# --- AI Processing Pipeline (dev defaults) ---
-gemini:
-  api-key: ${GEMINI_API_KEY:AQ.Ab8RN6Jbj7pNOghKahel8kjLenveDQvI0X0dZDjgOSaEGc7Niw}
-  chat:
-    model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
-
-openrouter:
-  api-key: ${OPENROUTER_API_KEY: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}
-  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}

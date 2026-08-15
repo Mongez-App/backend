@@ -9,6 +9,4 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/planning-service/target/planning-service-*.jar app.jar
 EXPOSE 8082
-# Default to prod profile for Railway deployment.
-ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "app.jar"]

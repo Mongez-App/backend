@@ -40,8 +40,6 @@ services:
       context: .
       dockerfile: api-gateway/Dockerfile
     container_name: smartstudy-api-gateway
-    volumes:
-      - ./credentials:/app/credentials:ro
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SERVER_PORT=${PORT:-8080}
@@ -58,8 +56,6 @@ services:
       context: .
       dockerfile: identity-service/Dockerfile
     container_name: smartstudy-identity-service
-    volumes:
-      - ./credentials:/app/credentials:ro
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SERVER_PORT=${PORT:-8081}
@@ -98,13 +94,9 @@ services:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
       - EUREKA_INSTANCE_HOSTNAME=${EUREKA_INSTANCE_HOSTNAME:-planning-service}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - SPRING_AI_GOOGLE_GEMINI_API_KEY=${SPRING_AI_GOOGLE_GEMINI_API_KEY:-}
-      - GEMINI_CHAT_MODEL=${GEMINI_CHAT_MODEL:-gemini-2.0-flash}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6334
       - MATERIAL_STORAGE_DIR=/app/uploads/materials
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
     depends_on:
       postgres:
         condition: service_healthy

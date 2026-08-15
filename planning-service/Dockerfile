@@ -9,7 +9,6 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/planning-service/target/planning-service-*.jar app.jar
 EXPOSE 8082
-# Default to dev profile so application-dev.yml (with API key defaults) is loaded.
-# Railway env vars override this when set in the dashboard.
-ENV SPRING_PROFILES_ACTIVE=dev
+# Default to prod profile for Railway deployment.
+ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "app.jar"]

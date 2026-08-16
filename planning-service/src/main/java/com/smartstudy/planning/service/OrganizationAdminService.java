@@ -82,6 +82,8 @@ public class OrganizationAdminService {
     private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
     private static final long MAX_MATERIAL_BYTES = 25L * 1024 * 1024;
     private static final int UPCOMING_EVENT_WINDOW_DAYS = 7;
+    /** Matches the invite_code column width on teams. */
+    private static final int MAX_INVITE_CODE_LENGTH = 64;
     private static final Pattern PHOTO_FILE_PATTERN =
             Pattern.compile("^[a-f0-9\\-]{36}\\.(png|jpg|jpeg)$");
 
@@ -138,7 +140,7 @@ public class OrganizationAdminService {
                 .organizationId(orgId)
                 .ownerId(orgId)
                 .imageUrl(request.photoUrl())
-                .inviteCode(generateUniqueInviteCode())
+                .inviteCode(resolveInviteCode(request.inviteCode()))
                 .build();
         // Team has an assigned id, so save() merges: @PrePersist timestamps land on
         // the returned managed copy, not on the instance built above.
@@ -759,6 +761,29 @@ public class OrganizationAdminService {
             log.warn("Could not read page count from {}: {}", pdfPath, ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Honours a caller-chosen invite code, falling back to a generated one.
+     * The length check is not cosmetic: invite_code is a 64-char unique column,
+     * and an over-long value would surface as an opaque 500 from the database.
+     */
+    private String resolveInviteCode(String requested) {
+        if (requested == null || requested.isBlank()) {
+            return generateUniqueInviteCode();
+        }
+        String code = requested.trim();
+        if (code.length() > MAX_INVITE_CODE_LENGTH) {
+            throw OrgApiException.validation(
+                    "invite_code must be at most " + MAX_INVITE_CODE_LENGTH + " characters.");
+        }
+        if (code.chars().anyMatch(Character::isWhitespace)) {
+            throw OrgApiException.validation("invite_code must not contain spaces.");
+        }
+        if (teamRepository.findByInviteCode(code).isPresent()) {
+            throw OrgApiException.conflict("This invite code is already in use.");
+        }
+        return code;
     }
 
     private String generateUniqueInviteCode() {

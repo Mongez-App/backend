@@ -115,7 +115,8 @@ public class StudyPlannerAgent {
                     task.sequenceOrder(),
                     task.description(),
                     task.coveredSections(),
-                    priority
+                    priority,
+                    task.materialId()
             ));
         }
     }
@@ -203,7 +204,7 @@ public class StudyPlannerAgent {
                         .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
                                 t.getSequenceOrder() != null ? t.getSequenceOrder() : 0,
                                 t.getDescription(), t.getCoveredSections() != null ? List.of(t.getCoveredSections().split(",")) : List.of(),
-                                t.getPriority()))
+                                t.getPriority(), t.getMaterialId()))
                         .toList();
 
                 List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
@@ -284,7 +285,9 @@ public class StudyPlannerAgent {
             }
 
             tasks.sort((a, b) -> Integer.compare(a.sequenceOrder(), b.sequenceOrder()));
-            return tasks;
+            // The LLM has no idea which material it read, so stamp the link here
+            // and let every later rewrite of the task carry it along.
+            return tasks.stream().map(task -> task.withMaterialId(materialId)).toList();
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to extract tasks from PDF text: " + ex.getMessage(), ex);
         }
@@ -314,7 +317,7 @@ public class StudyPlannerAgent {
             ExtractedTask t = buffer.get(0);
             result.add(new ExtractedTask(
                     t.title(), MIN_TASK_MINUTES, t.sequenceOrder(),
-                    t.description(), t.coveredSections(), t.priority()));
+                    t.description(), t.coveredSections(), t.priority(), t.materialId()));
         } else {
             result.add(mergeGroup(buffer));
         }
@@ -338,7 +341,9 @@ public class StudyPlannerAgent {
         int firstSequence = group.get(0).sequenceOrder();
         Priority firstPriority = group.get(0).priority() != null ? group.get(0).priority() : Priority.MEDIUM;
 
-        return new ExtractedTask(combinedTitle, totalMinutes, firstSequence, combinedDescription, combinedSections, firstPriority);
+        // A merge group is always consecutive tasks from one material.
+        return new ExtractedTask(combinedTitle, totalMinutes, firstSequence, combinedDescription,
+                combinedSections, firstPriority, group.get(0).materialId());
     }
 }
 

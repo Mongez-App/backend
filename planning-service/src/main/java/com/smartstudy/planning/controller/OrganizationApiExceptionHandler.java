@@ -5,6 +5,7 @@ import com.smartstudy.shared.logging.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -46,6 +47,12 @@ public class OrganizationApiExceptionHandler {
             MethodArgumentTypeMismatchException.class})
     public ResponseEntity<OrgErrorResponse> handleBadRequest(Exception ex) {
         return ResponseEntity.badRequest().body(new OrgErrorResponse("ValidationError", ex.getMessage()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<OrgErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(new OrgErrorResponse("ValidationError", "Request body is missing or malformed."));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

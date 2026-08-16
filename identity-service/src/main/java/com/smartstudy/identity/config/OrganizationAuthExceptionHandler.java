@@ -1,6 +1,7 @@
 package com.smartstudy.identity.config;
 
 import com.smartstudy.identity.controller.OrganizationAuthController;
+import com.smartstudy.identity.controller.OrganizationProfileController;
 import com.smartstudy.identity.dto.response.OrganizationAuthErrorResponse;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.exception.ConflictException;
@@ -9,12 +10,19 @@ import com.smartstudy.shared.exception.UnauthorizedException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.slf4j.Logger;
 
-@RestControllerAdvice(assignableTypes = OrganizationAuthController.class)
+/**
+ * Renders the organization endpoints' errors in the contract's
+ * {"error": ..., "message": ...} shape, for both the auth and the profile
+ * controller.
+ */
+@RestControllerAdvice(assignableTypes = {OrganizationAuthController.class, OrganizationProfileController.class})
 public class OrganizationAuthExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(OrganizationAuthExceptionHandler.class);
@@ -42,6 +50,17 @@ public class OrganizationAuthExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<OrganizationAuthErrorResponse> handleForbidden(AccessDeniedException ex) {
         return buildResponse("Forbidden", ex.getMessage(), HttpStatus.FORBIDDEN);
+    }
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
+    public ResponseEntity<OrganizationAuthErrorResponse> handleMalformedRequest(Exception ex) {
+        String message = ex instanceof MethodArgumentNotValidException validation
+                ? validation.getBindingResult().getFieldErrors().stream()
+                        .findFirst()
+                        .map(error -> error.getField() + " " + error.getDefaultMessage())
+                        .orElse("Request validation failed.")
+                : "Request body is missing or malformed.";
+        return buildResponse("ValidationError", message, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(Exception.class)

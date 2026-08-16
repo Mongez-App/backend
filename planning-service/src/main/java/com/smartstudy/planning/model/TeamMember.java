@@ -42,6 +42,10 @@ public class TeamMember {
     @Builder.Default
     private TeamMemberStatus status = TeamMemberStatus.PENDING;
 
+    /** Null while the request is pending; stamped when an admin accepts it. */
+    @Column(name = "joined_at")
+    private Instant joinedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

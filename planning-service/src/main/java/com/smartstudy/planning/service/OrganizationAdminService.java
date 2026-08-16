@@ -1,5 +1,6 @@
 package com.smartstudy.planning.service;
 
+import com.smartstudy.planning.client.IdentityServiceClient;
 import com.smartstudy.planning.config.StorageProperties;
 import com.smartstudy.planning.dto.request.OrgCreateCourseRequest;
 import com.smartstudy.planning.dto.request.OrgCreateEventRequest;
@@ -15,8 +16,12 @@ import com.smartstudy.planning.dto.response.OrgEventResponse;
 import com.smartstudy.planning.dto.response.OrgFileUploadResponse;
 import com.smartstudy.planning.dto.response.OrgMaterialListResponse;
 import com.smartstudy.planning.dto.response.OrgMaterialResponse;
+import com.smartstudy.planning.dto.response.OrgMemberActionResponse;
+import com.smartstudy.planning.dto.response.OrgMemberListResponse;
+import com.smartstudy.planning.dto.response.OrgMemberResponse;
 import com.smartstudy.planning.dto.response.OrgTeamListResponse;
 import com.smartstudy.planning.dto.response.OrgTeamResponse;
+import com.smartstudy.planning.dto.response.UserSummaryData;
 import com.smartstudy.planning.enums.TeamMemberStatus;
 import com.smartstudy.planning.exception.OrgApiException;
 import com.smartstudy.planning.model.Course;
@@ -60,6 +65,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Organization-admin module: an organization account (X-User-Id == organizationId)
@@ -83,6 +89,10 @@ public class OrganizationAdminService {
     public static final String MATERIAL_FILE_URL_TEMPLATE = "/api/v1/organization/materials/%s/file";
     private static final String PHOTOS_DIR = "org-photos";
 
+    /** Avatar tints the Members tab renders behind initials. */
+    private static final List<String> AVATAR_COLORS = List.of(
+            "#7C5CFC", "#F5A623", "#2D9CDB", "#27AE60", "#EB5757", "#BB6BD9");
+
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final CourseRepository courseRepository;
@@ -91,6 +101,7 @@ public class OrganizationAdminService {
     private final TaskRepository taskRepository;
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
+    private final IdentityServiceClient identityServiceClient;
 
     // ------------------------------------------------------------------
     // Teams
@@ -146,12 +157,21 @@ public class OrganizationAdminService {
 
     public OrgFileUploadResponse uploadTeamPhoto(String orgId, MultipartFile file) {
         log.info("Org {} uploading team photo: {}", orgId, file.getOriginalFilename());
+        return storeImage(file);
+    }
+
+    public OrgFileUploadResponse uploadProfilePhoto(String orgId, MultipartFile file) {
+        log.info("Org {} uploading profile photo: {}", orgId, file.getOriginalFilename());
+        return storeImage(file);
+    }
+
+    private OrgFileUploadResponse storeImage(MultipartFile file) {
         if (file.isEmpty()) {
             throw OrgApiException.validation("Uploaded file is empty.");
         }
         String extension = imageExtensionFor(file);
         if (extension == null) {
-            throw OrgApiException.unsupportedMediaType("Only PDF, PNG, and JPG files are supported.");
+            throw OrgApiException.unsupportedMediaType("Only PNG and JPG files are supported.");
         }
         if (file.getSize() > MAX_PHOTO_BYTES) {
             throw OrgApiException.payloadTooLarge("File exceeds the maximum allowed size of 5MB.");
@@ -180,7 +200,164 @@ public class OrganizationAdminService {
     }
 
     // ------------------------------------------------------------------
-    // Join requests
+    // Members
+    // ------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public OrgMemberListResponse getMembers(String orgId, String teamId) {
+        log.info("Org {} fetching members for team {}", orgId, teamId);
+        requireOrgTeam(orgId, teamId);
+
+        List<TeamMember> pending = teamMemberRepository
+                .findByTeamIdAndStatus(teamId, TeamMemberStatus.PENDING)
+                .stream()
+                .sorted(Comparator.comparing(TeamMember::getCreatedAt))
+                .toList();
+        List<TeamMember> active = teamMemberRepository
+                .findByTeamIdAndStatus(teamId, TeamMemberStatus.ACCEPTED)
+                .stream()
+                .sorted(Comparator.comparing(OrganizationAdminService::joinedAtOf))
+                .toList();
+
+        Map<String, UserSummaryData> users = lookupUsers(orgId,
+                Stream.concat(pending.stream(), active.stream())
+                        .map(TeamMember::getUserId)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)));
+
+        List<OrgMemberResponse> pendingMembers = pending.stream()
+                .map(member -> toMemberResponse(member, users, member.getCreatedAt(), null))
+                .toList();
+        List<OrgMemberResponse> teamMembers = active.stream()
+                .map(member -> toMemberResponse(member, users, null, joinedAtOf(member)))
+                .toList();
+
+        return new OrgMemberListResponse(teamId, pendingMembers, teamMembers,
+                pendingMembers.size(), teamMembers.size());
+    }
+
+    @Transactional
+    public OrgMemberActionResponse acceptMember(String orgId, String memberId) {
+        log.info("Org {} accepting member {}", orgId, memberId);
+        TeamMember member = requirePendingMember(orgId, memberId);
+        member.setStatus(TeamMemberStatus.ACCEPTED);
+        member.setJoinedAt(Instant.now());
+        teamMemberRepository.save(member);
+        return new OrgMemberActionResponse(member.getId().toString(), member.getTeamId(),
+                contractStatus(TeamMemberStatus.ACCEPTED), member.getJoinedAt());
+    }
+
+    @Transactional
+    public OrgMemberActionResponse declineMember(String orgId, String memberId) {
+        log.info("Org {} declining member {}", orgId, memberId);
+        TeamMember member = requirePendingMember(orgId, memberId);
+        member.setStatus(TeamMemberStatus.REJECTED);
+        teamMemberRepository.save(member);
+        return new OrgMemberActionResponse(member.getId().toString(), member.getTeamId(),
+                contractStatus(TeamMemberStatus.REJECTED), null);
+    }
+
+    /**
+     * Loads a membership row addressed by its own id, checks the caller manages
+     * the team it belongs to, and rejects anything no longer pending.
+     */
+    private TeamMember requirePendingMember(String orgId, String memberId) {
+        UUID id;
+        try {
+            id = UUID.fromString(memberId.trim());
+        } catch (IllegalArgumentException ex) {
+            throw OrgApiException.notFound("Pending member request was not found.");
+        }
+        TeamMember member = teamMemberRepository.findById(id)
+                .orElseThrow(() -> OrgApiException.notFound("Pending member request was not found."));
+        Team team = teamRepository.findById(member.getTeamId())
+                .orElseThrow(() -> OrgApiException.notFound("Team with the given ID was not found."));
+        if (!orgId.equals(team.getOrganizationId())) {
+            throw OrgApiException.forbidden(
+                    "You do not have permission to manage members for this team.");
+        }
+        if (member.getStatus() == TeamMemberStatus.ACCEPTED) {
+            throw OrgApiException.conflict("This member has already been accepted.");
+        }
+        if (member.getStatus() != TeamMemberStatus.PENDING) {
+            throw OrgApiException.notFound("Pending member request was not found.");
+        }
+        return member;
+    }
+
+    private OrgMemberResponse toMemberResponse(TeamMember member,
+                                               Map<String, UserSummaryData> users,
+                                               Instant requestedAt,
+                                               Instant joinedAt) {
+        String name = displayName(member.getUserId(), users.get(member.getUserId()));
+        return new OrgMemberResponse(
+                member.getId().toString(),
+                name,
+                initialsOf(name),
+                avatarColorOf(member.getUserId()),
+                contractStatus(member.getStatus()),
+                requestedAt,
+                joinedAt);
+    }
+
+    private Map<String, UserSummaryData> lookupUsers(String orgId, Set<String> userIds) {
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        List<UserSummaryData> users = identityServiceClient.lookupUsers(orgId, List.copyOf(userIds));
+        if (users == null) {
+            return Map.of();
+        }
+        return users.stream()
+                .filter(user -> user.id() != null)
+                .collect(Collectors.toMap(UserSummaryData::id, user -> user, (first, second) -> first));
+    }
+
+    /**
+     * Rows accepted before joined_at existed have no timestamp of their own, so
+     * the row's last write stands in for the join date.
+     */
+    private static Instant joinedAtOf(TeamMember member) {
+        return member.getJoinedAt() != null ? member.getJoinedAt() : member.getUpdatedAt();
+    }
+
+    private static String contractStatus(TeamMemberStatus status) {
+        return switch (status) {
+            case PENDING -> "pending";
+            case ACCEPTED -> "active";
+            case REJECTED -> "declined";
+        };
+    }
+
+    private static String displayName(String userId, UserSummaryData user) {
+        if (user != null && user.name() != null && !user.name().isBlank()) {
+            return user.name().trim();
+        }
+        if (user != null && user.email() != null && !user.email().isBlank()) {
+            String email = user.email().trim();
+            int at = email.indexOf('@');
+            return at > 0 ? email.substring(0, at) : email;
+        }
+        return "Member " + userId.substring(0, Math.min(6, userId.length()));
+    }
+
+    private static String initialsOf(String name) {
+        StringBuilder initials = new StringBuilder();
+        for (String part : name.trim().split("\\s+")) {
+            if (!part.isEmpty() && initials.length() < 2) {
+                initials.append(Character.toUpperCase(part.charAt(0)));
+            }
+        }
+        return initials.isEmpty() ? "?" : initials.toString();
+    }
+
+    /** Stable per-user avatar tint, so a member keeps the same color everywhere. */
+    private static String avatarColorOf(String userId) {
+        return AVATAR_COLORS.get(Math.floorMod(userId.hashCode(), AVATAR_COLORS.size()));
+    }
+
+    // ------------------------------------------------------------------
+    // Join requests (superseded by the member endpoints above; kept for
+    // clients still on the previous contract)
     // ------------------------------------------------------------------
 
     @Transactional(readOnly = true)
@@ -221,6 +398,9 @@ public class OrganizationAdminService {
             throw OrgApiException.notFound("Join request was not found.");
         }
         member.setStatus(target);
+        if (target == TeamMemberStatus.ACCEPTED) {
+            member.setJoinedAt(Instant.now());
+        }
         teamMemberRepository.save(member);
         return new OrgMemberStatusResponse(request.teamId(), request.userId(), target.name());
     }

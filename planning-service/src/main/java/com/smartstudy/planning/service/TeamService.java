@@ -300,6 +300,7 @@ public class TeamService {
                 .teamId(team.getId())
                 .userId(userId)
                 .status(TeamMemberStatus.ACCEPTED)
+                .joinedAt(Instant.now())
                 .build();
         teamMemberRepository.save(creator);
         return toTeamResponse(team, userId);

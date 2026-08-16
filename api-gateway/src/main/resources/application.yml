@@ -26,6 +26,12 @@ spring:
                    - /api/v1/users/**
                    - /api/v1/organization/auth
                    - /api/v1/organization/auth/**
+                   # The organization record lives in identity-service, so these
+                   # two paths are carved out of the /organization/** block that
+                   # otherwise belongs to planning-service. This route is
+                   # declared first, so the exact paths win.
+                   - /api/v1/organization/getProfile
+                   - /api/v1/organization/updateProfile
           filters:
             - StripPrefix=2
             - name: CircuitBreaker

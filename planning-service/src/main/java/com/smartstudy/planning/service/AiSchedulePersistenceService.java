@@ -40,7 +40,9 @@ public class AiSchedulePersistenceService {
             Task task = Task.builder()
                     .userId(userId)
                     .courseId(courseId)
-                    .materialId(materialId)
+                    // The part's own link wins: a reschedule re-plans tasks from
+                    // several materials at once and passes no single materialId.
+                    .materialId(part.materialId() != null ? part.materialId() : materialId)
                     .title(part.title())
                     .durationMinutes(part.minutes())
                     .priority(part.priority() != null ? part.priority() : Priority.MEDIUM)

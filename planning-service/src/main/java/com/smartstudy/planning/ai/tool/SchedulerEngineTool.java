@@ -55,7 +55,8 @@ public class SchedulerEngineTool {
                         totalParts > 1 ? totalParts : null,
                         task.description(),
                         task.coveredSections(),
-                        task.priority() != null ? task.priority() : Priority.MEDIUM
+                        task.priority() != null ? task.priority() : Priority.MEDIUM,
+                        task.materialId()
                 );
                 parts.add(part);
                 remainingMinutes[i] -= allocate;

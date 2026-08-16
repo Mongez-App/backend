@@ -9,4 +9,7 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/planning-service/target/planning-service-*.jar app.jar
 EXPOSE 8082
+# Safe default for container deployments. Railway's SPRING_PROFILES_ACTIVE
+# service variable overrides this at runtime.
+ENV SPRING_PROFILES_ACTIVE=prod
 ENTRYPOINT ["java", "-jar", "app.jar"]

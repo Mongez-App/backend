@@ -54,6 +54,10 @@ public class Organization {
     @Builder.Default
     private Integer noOfTeams = 0;
 
+    @Column(name = "is_verified_org", nullable = false)
+    @Builder.Default
+    private boolean isVerifiedOrg = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

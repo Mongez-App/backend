@@ -115,7 +115,8 @@ public class OrganizationAuthServiceImpl implements OrganizationAuthService {
                 org.getEstablishedAt() != null ? org.getEstablishedAt().toString() : null,
                 org.getNoOfStudents(),
                 org.getNoOfCourses(),
-                org.getNoOfTeams()
+                org.getNoOfTeams(),
+                org.isVerifiedOrg()
         );
     }
 }

@@ -40,6 +40,9 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     List<Task> findByUserIdAndCourseIdAndCompletedFalse(String userId, UUID courseId);
 
+    List<Task> findByUserIdAndCourseIdAndCompletedFalseAndMissedTrue(
+            String userId, UUID courseId);
+
     boolean existsByCourseIdAndUserIdAndMaterialIdIsNotNull(UUID courseId, String userId);
 
     List<Task> findByMaterialIdAndUserId(UUID materialId, String userId);

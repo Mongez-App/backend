@@ -5,6 +5,7 @@ import com.smartstudy.planning.ai.model.ExtractedTask;
 import com.smartstudy.planning.ai.model.ScheduleResult;
 import com.smartstudy.planning.ai.model.ScheduledPart;
 import com.smartstudy.planning.ai.tool.SchedulerEngineTool;
+import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.model.Material;
 import com.smartstudy.planning.model.MaterialStatus;
 import com.smartstudy.planning.model.Priority;
@@ -30,6 +31,8 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 
 /**
  * A task must keep pointing at the material it came from, or deleting that
@@ -116,5 +119,33 @@ class AiSchedulePersistenceServiceTest {
         assertEquals(3, result.scheduledParts().size());
         assertTrue(result.scheduledParts().stream()
                 .allMatch(part -> materialId.equals(part.materialId())));
+    }
+
+    @Test
+    void fullReschedule_deletesFutureAndMissedTasksAndTheirEvents() {
+        UUID futureTaskId = UUID.randomUUID();
+        UUID missedTaskId = UUID.randomUUID();
+        UUID futureEventId = UUID.randomUUID();
+        UUID missedEventId = UUID.randomUUID();
+
+        Task futureTask = Task.builder().id(futureTaskId).userId(USER_ID).courseId(COURSE_ID).build();
+        Task missedTask = Task.builder().id(missedTaskId).userId(USER_ID).courseId(COURSE_ID).missed(true).completed(false).build();
+
+        Event futureEvent = Event.builder().id(futureEventId).userId(USER_ID).courseId(COURSE_ID).taskId(futureTaskId).build();
+        Event missedEvent = Event.builder().id(missedEventId).userId(USER_ID).courseId(COURSE_ID).taskId(missedTaskId).build();
+
+        when(taskRepository.findByUserIdAndCourseIdAndScheduledDateAfterAndCompletedFalseAndMissedFalse(
+                USER_ID, COURSE_ID, LocalDate.now()))
+                .thenReturn(List.of(futureTask));
+        when(taskRepository.findByUserIdAndCourseIdAndCompletedFalseAndMissedTrue(
+                USER_ID, COURSE_ID))
+                .thenReturn(List.of(missedTask));
+        when(eventRepository.findByUserIdAndCourseIdAndTaskIdIsNotNull(USER_ID, COURSE_ID))
+                .thenReturn(List.of(futureEvent, missedEvent));
+
+        service.fullReschedule(USER_ID, COURSE_ID);
+
+        verify(taskRepository, times(2)).deleteAll(any());
+        verify(eventRepository, times(2)).deleteAll(any());
     }
 }

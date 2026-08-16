@@ -93,20 +93,35 @@ public class AiSchedulePersistenceService {
     @Transactional
     public void fullReschedule(String userId, UUID courseId) {
         LocalDate today = LocalDate.now();
+
         List<Task> futureTasks = taskRepository.findByUserIdAndCourseIdAndScheduledDateAfterAndCompletedFalseAndMissedFalse(
                 userId, courseId, today);
 
-        List<UUID> deletedTaskIds = futureTasks.stream().map(Task::getId).toList();
+        List<UUID> futureTaskIds = futureTasks.stream().map(Task::getId).toList();
 
         List<Event> allLinkedEvents = eventRepository.findByUserIdAndCourseIdAndTaskIdIsNotNull(
                 userId, courseId);
-        List<Event> linkedEvents = allLinkedEvents.stream()
-                .filter(e -> e.getTaskId() != null && deletedTaskIds.contains(e.getTaskId()))
+        List<Event> futureLinkedEvents = allLinkedEvents.stream()
+                .filter(e -> e.getTaskId() != null && futureTaskIds.contains(e.getTaskId()))
                 .toList();
 
-        log.info("Full reschedule: deleting {} future tasks and {} linked events", futureTasks.size(), linkedEvents.size());
+        log.info("Full reschedule: deleting {} future tasks and {} linked events", futureTasks.size(), futureLinkedEvents.size());
 
-        eventRepository.deleteAll(linkedEvents);
+        eventRepository.deleteAll(futureLinkedEvents);
         taskRepository.deleteAll(futureTasks);
+
+        List<Task> missedTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalseAndMissedTrue(
+                userId, courseId);
+
+        List<UUID> missedTaskIds = missedTasks.stream().map(Task::getId).toList();
+
+        List<Event> missedLinkedEvents = allLinkedEvents.stream()
+                .filter(e -> e.getTaskId() != null && missedTaskIds.contains(e.getTaskId()))
+                .toList();
+
+        log.info("Full reschedule: deleting {} missed tasks and {} linked events", missedTasks.size(), missedLinkedEvents.size());
+
+        eventRepository.deleteAll(missedLinkedEvents);
+        taskRepository.deleteAll(missedTasks);
     }
 }

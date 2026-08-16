@@ -4,7 +4,10 @@ import com.smartstudy.planning.dto.request.OrgCreateCourseRequest;
 import com.smartstudy.planning.dto.request.OrgCreateEventRequest;
 import com.smartstudy.planning.dto.request.OrgCreateTeamRequest;
 import com.smartstudy.planning.dto.request.OrgMemberActionRequest;
+import com.smartstudy.planning.dto.request.OrgMemberIdRequest;
 import com.smartstudy.planning.dto.response.OrgJoinRequestListResponse;
+import com.smartstudy.planning.dto.response.OrgMemberActionResponse;
+import com.smartstudy.planning.dto.response.OrgMemberListResponse;
 import com.smartstudy.planning.dto.response.OrgMemberStatusResponse;
 import com.smartstudy.planning.dto.response.OrgCourseListResponse;
 import com.smartstudy.planning.dto.response.OrgCourseResponse;
@@ -86,6 +89,39 @@ public class OrganizationAdminController {
         return ResponseEntity.ok()
                 .contentType(mediaType)
                 .body(new FileSystemResource(path));
+    }
+
+    @PostMapping("/uploadProfilePhoto")
+    @ResponseStatus(HttpStatus.CREATED)
+    public OrgFileUploadResponse uploadProfilePhoto(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @RequestPart("file") MultipartFile file) {
+        log.info("Incoming request: POST /organization/uploadProfilePhoto | orgId: {}", orgId);
+        return organizationAdminService.uploadProfilePhoto(requireOrg(orgId), file);
+    }
+
+    @GetMapping("/getMembers")
+    public OrgMemberListResponse getMembers(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @RequestParam String teamId) {
+        log.info("Incoming request: GET /organization/getMembers | orgId: {} | teamId: {}", orgId, teamId);
+        return organizationAdminService.getMembers(requireOrg(orgId), teamId);
+    }
+
+    @PostMapping("/acceptMember")
+    public OrgMemberActionResponse acceptMember(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @Valid @RequestBody OrgMemberIdRequest request) {
+        log.info("Incoming request: POST /organization/acceptMember | orgId: {}", orgId);
+        return organizationAdminService.acceptMember(requireOrg(orgId), request.memberId());
+    }
+
+    @PostMapping("/declineMember")
+    public OrgMemberActionResponse declineMember(
+            @RequestHeader(value = "X-User-Id", required = false) String orgId,
+            @Valid @RequestBody OrgMemberIdRequest request) {
+        log.info("Incoming request: POST /organization/declineMember | orgId: {}", orgId);
+        return organizationAdminService.declineMember(requireOrg(orgId), request.memberId());
     }
 
     @GetMapping("/getJoinRequests")

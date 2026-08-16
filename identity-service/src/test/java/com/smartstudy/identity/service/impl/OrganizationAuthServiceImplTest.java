@@ -68,6 +68,7 @@ class OrganizationAuthServiceImplTest {
         assertEquals(0, response.no_of_students());
         assertEquals(0, response.no_of_courses());
         assertEquals(0, response.no_of_teams());
+        assertEquals(false, response.is_verified_org());
 
         verify(organizationRepository).save(any(Organization.class));
     }
@@ -138,6 +139,7 @@ class OrganizationAuthServiceImplTest {
         assertEquals(10, response.no_of_students());
         assertEquals(5, response.no_of_courses());
         assertEquals(2, response.no_of_teams());
+        assertEquals(false, response.is_verified_org());
     }
 
     @Test

@@ -11,6 +11,7 @@ public record OrganizationDataResponse(
         String established_at,
         Integer no_of_students,
         Integer no_of_courses,
-        Integer no_of_teams
+        Integer no_of_teams,
+        boolean is_verified_org
 ) {
 }

@@ -1,6 +1,7 @@
 package com.smartstudy.planning.chat;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstudy.planning.chat.model.GeminiPrompt;
 import com.smartstudy.planning.chat.model.RetrievedChunk;
@@ -263,11 +264,41 @@ public class ChatService {
     }
 
     private ChatMessageResponse toMessageResponse(ChatMessage msg) {
+        if (msg.getRole() != MessageRole.ASSISTANT) {
+            return ChatMessageResponse.userMessage(
+                    msg.getId().toString(),
+                    msg.getRole().name(),
+                    msg.getContent(),
+                    msg.getCreatedAt()
+            );
+        }
+
         return new ChatMessageResponse(
                 msg.getId().toString(),
                 msg.getRole().name(),
                 msg.getContent(),
-                msg.getCreatedAt()
+                msg.getCreatedAt(),
+                msg.getUsedContext(),
+                msg.getConfidence(),
+                msg.getSuggestedFollowUp(),
+                deserializeSources(msg.getSources())
         );
+    }
+
+    /**
+     * Sources are persisted as a JSON string. A row written before this field
+     * existed, or by a model that returned malformed JSON, must not break history
+     * retrieval — the message itself is still worth returning.
+     */
+    private List<LlmStructuredResponse.SourceReference> deserializeSources(String sourcesJson) {
+        if (sourcesJson == null || sourcesJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(sourcesJson, new TypeReference<>() {});
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to deserialize stored sources, omitting them: {}", e.getMessage());
+            return null;
+        }
     }
 }

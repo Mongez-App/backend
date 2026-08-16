@@ -15,6 +15,21 @@ eureka:
     prefer-ip-address: false
     hostname: ${EUREKA_INSTANCE_HOSTNAME:planning-service.railway.internal}
 
+# --- AI Processing Pipeline ---
+# No defaults here on purpose. These are secrets and must come from the Railway
+# service variables; a literal key committed here would leak through git history.
+# GEMINI_API_KEY is the one the chat pipeline actually reads — note it is NOT
+# the same variable as SPRING_AI_GOOGLE_GEMINI_API_KEY, which feeds an unused
+# Spring AI starter.
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  chat:
+    model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
+
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:}
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+
 # Uploaded PDFs must live on the mounted Railway volume, not the container's
 # own filesystem, which is recreated on every deploy.
 storage:

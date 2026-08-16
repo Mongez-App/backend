@@ -82,7 +82,7 @@ public class OpenRouterChatClient {
 
             log.info("OpenRouter succeeded.");
             String text = extractTextFromOpenRouterResponse(response);
-            return parseStructuredResponse(text);
+            return LlmResponseParser.parse(text, "OpenRouter", objectMapper);
 
         } catch (HttpStatusCodeException e) {
             int statusCode = e.getStatusCode().value();
@@ -172,22 +172,5 @@ public class OpenRouterChatClient {
             throw new ChatException("AI_RESPONSE_FAILED", "OpenRouter choice contained no message");
         }
         return (String) messageObj.get("content");
-    }
-
-    private LlmStructuredResponse parseStructuredResponse(String text) {
-        try {
-            String cleaned = text.strip();
-            if (cleaned.startsWith("```")) {
-                int firstNewline = cleaned.indexOf('\n');
-                int lastFence = cleaned.lastIndexOf("```");
-                if (firstNewline != -1 && lastFence > firstNewline) {
-                    cleaned = cleaned.substring(firstNewline + 1, lastFence).strip();
-                }
-            }
-            return objectMapper.readValue(cleaned, LlmStructuredResponse.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse structured OpenRouter LLM response, using fallback: {}", e.getMessage());
-            return new LlmStructuredResponse(text, false, "LOW", null, List.of());
-        }
     }
 }

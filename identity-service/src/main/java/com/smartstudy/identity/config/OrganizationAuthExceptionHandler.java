@@ -8,6 +8,8 @@ import com.smartstudy.shared.exception.ConflictException;
 import com.smartstudy.shared.exception.NotFoundException;
 import com.smartstudy.shared.exception.UnauthorizedException;
 import com.smartstudy.shared.logging.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -21,7 +23,15 @@ import org.slf4j.Logger;
  * Renders the organization endpoints' errors in the contract's
  * {"error": ..., "message": ...} shape, for both the auth and the profile
  * controller.
+ * <p>
+ * The explicit order is load-bearing. {@link GlobalExceptionHandler} is
+ * unscoped and declares most of the same exception types; with neither advice
+ * ordered, ties fall to bean registration order and the global one wins, so
+ * these endpoints answered in the generic {"error_code", "message",
+ * "timestamp"} shape instead of the contract's.
+ * </p>
  */
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice(assignableTypes = {OrganizationAuthController.class, OrganizationProfileController.class})
 public class OrganizationAuthExceptionHandler {
 

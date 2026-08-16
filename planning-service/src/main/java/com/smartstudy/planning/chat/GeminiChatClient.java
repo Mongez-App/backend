@@ -13,6 +13,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -46,7 +47,7 @@ public class GeminiChatClient {
     }
 
     /**
-     * Fallback order of models retrieved from Gemini API GET /v1beta/models.
+     * Models tried after the configured one, in order.
      */
     private static final List<String> FALLBACK_MODELS = List.of(
             "models/gemini-2.5-flash",
@@ -56,6 +57,31 @@ public class GeminiChatClient {
     );
 
     /**
+     * The configured model ({@code gemini.chat.model} / {@code GEMINI_CHAT_MODEL})
+     * first, then the fallbacks, with duplicates removed. Without this the
+     * configured value would be silently ignored, since only the hardcoded list
+     * was ever tried.
+     */
+    private List<String> modelsToTry() {
+        List<String> models = new ArrayList<>();
+        String configured = geminiProps.chat() != null ? geminiProps.chat().model() : null;
+        if (configured != null && !configured.isBlank()) {
+            models.add(qualify(configured));
+        }
+        for (String fallback : FALLBACK_MODELS) {
+            String qualified = qualify(fallback);
+            if (!models.contains(qualified)) {
+                models.add(qualified);
+            }
+        }
+        return models;
+    }
+
+    private static String qualify(String model) {
+        return model.startsWith("models/") ? model : "models/" + model;
+    }
+
+    /**
      * Call Gemini generateContent with the assembled prompt.
      *
      * @param prompt the fully assembled, typed prompt built by PromptBuilder
@@ -63,15 +89,12 @@ public class GeminiChatClient {
      * @throws ChatException if the API call fails or response is unparseable
      */
     public LlmStructuredResponse generate(GeminiPrompt prompt) {
-        boolean providerUnavailable = true;
-        int failedCount = 0;
         Exception lastException = null;
 
-        for (String model : FALLBACK_MODELS) {
-            String cleanModel = model.startsWith("models/") ? model : "models/" + model;
-            String url = "/" + cleanModel + ":generateContent";
+        for (String model : modelsToTry()) {
+            String url = "/" + model + ":generateContent";
 
-            log.info("Trying Gemini model: {}", cleanModel);
+            log.info("Trying Gemini model: {}", model);
 
             try {
                 Map<String, Object> response = geminiRestClient.post()
@@ -81,21 +104,16 @@ public class GeminiChatClient {
                         .body(new ParameterizedTypeReference<>() {});
 
                 String text = extractTextFromResponse(response);
-                return parseStructuredResponse(text);
+                return LlmResponseParser.parse(text, "Gemini", objectMapper);
 
             } catch (HttpStatusCodeException e) {
-                failedCount++;
                 lastException = e;
                 int statusCode = e.getStatusCode().value();
 
-                if (statusCode == HttpStatus.TOO_MANY_REQUESTS.value()) { // 429
-                    log.warn("Gemini returned 429 for model {}", cleanModel);
-                } else if (statusCode == HttpStatus.NOT_FOUND.value()) { // 404
-                    log.warn("Model {} failed with 404 Not Found, trying next...", cleanModel);
-                } else if (e.getStatusCode().is5xxServerError()) { // 5xx
-                    log.warn("Model {} failed with {}, trying next...", cleanModel, statusCode);
-                } else if (statusCode == HttpStatus.UNAUTHORIZED.value() || statusCode == HttpStatus.FORBIDDEN.value()) {
-                    providerUnavailable = false;
+                // An auth failure is the same for every model — retrying the rest
+                // just burns time before returning the same answer.
+                if (statusCode == HttpStatus.UNAUTHORIZED.value()
+                        || statusCode == HttpStatus.FORBIDDEN.value()) {
                     throw new ChatException(
                             "AI_AUTHENTICATION_FAILED",
                             "Authentication with the AI provider failed. Check your GEMINI_API_KEY.",
@@ -103,36 +121,26 @@ public class GeminiChatClient {
                             "Gemini",
                             e
                     );
-                } else {
-                    providerUnavailable = false;
-                    log.warn("Model {} failed with status {}, trying next...", cleanModel, statusCode);
                 }
-            } catch (ResourceAccessException e) {
-                failedCount++;
-                lastException = e;
-                log.warn("Model {} failed with network timeout/error, trying next...", cleanModel);
+
+                log.warn("Gemini model {} failed with status {}, trying next...", model, statusCode);
             } catch (ChatException e) {
                 throw e;
-            } catch (Exception e) {
-                failedCount++;
+            } catch (ResourceAccessException e) {
                 lastException = e;
-                providerUnavailable = false;
-                log.warn("Model {} failed unexpectedly: {}, trying next...", cleanModel, e.getMessage());
+                log.warn("Gemini model {} failed with network timeout/error, trying next...", model);
+            } catch (Exception e) {
+                lastException = e;
+                log.warn("Gemini model {} failed unexpectedly: {}, trying next...", model, e.getMessage());
             }
         }
 
-        if (failedCount > 0 && providerUnavailable) {
-            log.info("Switching to OpenRouter...");
-            return openRouterChatClient.generate(prompt);
-        }
-
-        throw new ChatException(
-                "AI_RESPONSE_FAILED",
-                "All Gemini models failed. Last error: " + (lastException != null ? lastException.getMessage() : "Unknown error"),
-                HttpStatus.BAD_GATEWAY,
-                "Gemini",
-                lastException
-        );
+        // Every Gemini model failed for a non-auth reason. OpenRouter is the last
+        // resort; if it is unconfigured or also failing it throws a ChatException
+        // that names the real cause, which beats reporting a stale Gemini error.
+        log.warn("All Gemini models failed (last error: {}). Switching to OpenRouter...",
+                lastException != null ? lastException.getMessage() : "unknown");
+        return openRouterChatClient.generate(prompt);
     }
 
     @SuppressWarnings("unchecked")
@@ -148,39 +156,23 @@ public class GeminiChatClient {
             throw new ChatException("AI_RESPONSE_FAILED",
                     "Gemini response contained no candidates");
         }
-        Map<String, Object> content =
-                (Map<String, Object>) candidates.get(0).get("content");
+        Map<String, Object> candidate = candidates.get(0);
+
+        // A candidate can come back with no content at all when generation stopped
+        // early — SAFETY means a blocked answer, MAX_TOKENS a truncated one. Both
+        // used to surface as a null answer persisted into the chat history.
+        Object finishReason = candidate.get("finishReason");
+        Map<String, Object> content = (Map<String, Object>) candidate.get("content");
         if (content == null) {
             throw new ChatException("AI_RESPONSE_FAILED",
-                    "Gemini response candidate contained no content");
+                    "Gemini returned no content (finishReason: " + finishReason + ")");
         }
         List<Map<String, Object>> parts =
                 (List<Map<String, Object>>) content.get("parts");
         if (parts == null || parts.isEmpty()) {
             throw new ChatException("AI_RESPONSE_FAILED",
-                    "Gemini response content contained no parts");
+                    "Gemini returned no content parts (finishReason: " + finishReason + ")");
         }
         return (String) parts.get(0).get("text");
-    }
-
-    private LlmStructuredResponse parseStructuredResponse(String text) {
-        try {
-            // Strip markdown code fences if present (```json ... ```)
-            String cleaned = text.strip();
-            if (cleaned.startsWith("```")) {
-                int firstNewline = cleaned.indexOf('\n');
-                int lastFence = cleaned.lastIndexOf("```");
-                if (firstNewline != -1 && lastFence > firstNewline) {
-                    cleaned = cleaned.substring(firstNewline + 1, lastFence).strip();
-                }
-            }
-            return objectMapper.readValue(cleaned, LlmStructuredResponse.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse structured LLM response, using fallback: {}",
-                    e.getMessage());
-            // Fallback: wrap raw text as a low-confidence answer
-            return new LlmStructuredResponse(
-                    text, false, "LOW", null, List.of());
-        }
     }
 }

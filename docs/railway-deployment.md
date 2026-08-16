@@ -55,8 +55,8 @@ git history.
 
 | Variable | Notes |
 | --- | --- |
-| `GEMINI_API_KEY` | **The one the chat pipeline actually reads.** |
-| `SPRING_AI_GOOGLE_GEMINI_API_KEY` | Feeds `spring.ai.google.genai.*`, consumed only by the unused `spring-ai-starter-model-google-genai`. Setting this does **not** give the chat pipeline a key. |
+| `GEMINI_API_KEY` | Read by the **chat tutor** (`GeminiChatClient`, own `RestClient`). |
+| `SPRING_AI_GOOGLE_GEMINI_API_KEY` | Read by **task generation** (`StudyPlannerAgent`, Spring AI `ChatClient`). A different Gemini path with a different key — setting one does **not** cover the other, and the two features fail independently. |
 | `OPENROUTER_API_KEY` | Without it the OpenRouter fallback throws `AI_AUTHENTICATION_FAILED` instead of answering. |
 | `SPRING_PROFILES_ACTIVE` | Must be `prod`, or `application-prod.yml` never loads and Qdrant resolves to `localhost`. |
 | `QDRANT_HOST` | `qdrant.railway.internal` |
@@ -67,9 +67,16 @@ git history.
 Those first two variables are the outage referenced above: only
 `SPRING_AI_GOOGLE_GEMINI_API_KEY` was set, `gemini.api-key` was bound to
 `${GEMINI_API_KEY}` with no default, the placeholder could not resolve, and the
-context failed to start. Every chat request errored at the gateway. Both names
-now carry an empty default so a missing key surfaces as an explicit
+context failed to start. Every chat request errored at the gateway. The key now
+carries an empty default so a missing value surfaces as an explicit
 `GEMINI_API_KEY is not configured` message instead of a placeholder stack trace.
+
+The two names are genuinely both needed. Gemini is reached through two unrelated
+code paths — the chat tutor's hand-rolled `RestClient` and the planner agent's
+Spring AI `ChatClient` — each with its own key property and its own model
+setting (`gemini.chat.model` and `spring.ai.google.genai.chat.options.model`).
+Chat can work perfectly while task generation is broken, and vice versa. Check
+both before concluding "the AI is down".
 
 ## Qdrant
 

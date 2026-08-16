@@ -2,16 +2,17 @@ package com.smartstudy.planning.processing;
 
 import com.smartstudy.planning.config.ProcessingProperties;
 import com.smartstudy.planning.model.Material;
-import com.smartstudy.planning.model.MaterialStatus;
+import com.smartstudy.planning.model.MaterialIndexingStatus;
 import com.smartstudy.planning.repository.MaterialRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import org.slf4j.Logger;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Optional;
+import java.util.List;
 
 /**
  * Background scheduler that polls for materials to process and retries failed ones.
@@ -41,45 +42,51 @@ public class ScheduledProcessingService {
     }
 
     /**
-     * Primary poller: look for the oldest material in PROCESSING status and process it.
+     * Primary poller: index the oldest material awaiting it.
      * Runs with a configurable fixed delay (default 5 seconds).
+     * <p>
+     * Keyed on {@code indexingStatus}, never on {@code status}. The latter belongs
+     * to the task-generation agent, which sets PROCESSING and then READY inside a
+     * single upload transaction — so PROCESSING was never visible to this poller
+     * and nothing was ever indexed.
+     * </p>
      */
     @Scheduled(fixedDelayString = "${processing.poll-interval-ms:5000}")
     @Transactional
     public void pollForProcessing() {
-        Optional<Material> opt = materialRepository
-                .findFirstByStatusOrderByUploadedAtAsc(MaterialStatus.PROCESSING);
+        List<Material> awaiting = materialRepository.findAwaitingIndexing(
+                MaterialIndexingStatus.PENDING, PageRequest.of(0, 1));
 
-        if (opt.isEmpty()) {
-            return; // Nothing to process
+        if (awaiting.isEmpty()) {
+            return; // Nothing to index
         }
 
-        Material material = opt.get();
-        log.info("Picked up material {} ({}) for processing",
+        Material material = awaiting.get(0);
+        log.info("Picked up material {} ({}) for indexing",
                 material.getId(), material.getName());
 
-        material.setProcessingStartedAt(Instant.now());
+        material.setIndexingStatus(MaterialIndexingStatus.INDEXING);
         materialRepository.save(material);
 
         try {
             processingService.process(material);
 
             // Success
-            material.setStatus(MaterialStatus.READY);
-            material.setProcessedAt(Instant.now());
-            material.setErrorMessage(null);
+            material.setIndexingStatus(MaterialIndexingStatus.INDEXED);
+            material.setIndexedAt(Instant.now());
+            material.setIndexingErrorMessage(null);
             materialRepository.save(material);
 
-            log.info("Material {} processed successfully → READY", material.getId());
+            log.info("Material {} indexed successfully → INDEXED", material.getId());
 
         } catch (Exception e) {
             // Failure
-            material.setStatus(MaterialStatus.FAILED);
-            material.setErrorMessage(truncateMessage(e.getMessage(), 2000));
+            material.setIndexingStatus(MaterialIndexingStatus.FAILED);
+            material.setIndexingErrorMessage(truncateMessage(e.getMessage(), 2000));
             material.setRetryCount(material.getRetryCount() + 1);
             materialRepository.save(material);
 
-            log.error("Material {} processing failed (retry {}/{}): {}",
+            log.error("Material {} indexing failed (retry {}/{}): {}",
                     material.getId(),
                     material.getRetryCount(),
                     processingProps.maxRetries(),
@@ -88,29 +95,27 @@ public class ScheduledProcessingService {
     }
 
     /**
-     * Retry poller: look for FAILED materials that haven't exceeded the retry limit
-     * and re-queue them to PROCESSING status.
-     * Runs with a configurable fixed delay (default 30 minutes).
+     * Retry poller: re-queue materials whose indexing failed and that still have
+     * retries left. Runs with a configurable fixed delay (default 30 minutes).
      */
     @Scheduled(fixedDelayString = "${processing.retry-interval-ms:1800000}")
     @Transactional
     public void retryFailedMaterials() {
-        Optional<Material> opt = materialRepository
-                .findFirstByStatusAndRetryCountLessThanOrderByUploadedAtAsc(
-                        MaterialStatus.FAILED, processingProps.maxRetries());
+        List<Material> retryable = materialRepository.findRetryableIndexing(
+                MaterialIndexingStatus.FAILED, processingProps.maxRetries(), PageRequest.of(0, 1));
 
-        if (opt.isEmpty()) {
+        if (retryable.isEmpty()) {
             return; // No retryable materials
         }
 
-        Material material = opt.get();
-        log.info("Re-queuing FAILED material {} for retry (attempt {}/{})",
+        Material material = retryable.get(0);
+        log.info("Re-queuing material {} for indexing retry (attempt {}/{})",
                 material.getId(),
                 material.getRetryCount() + 1,
                 processingProps.maxRetries());
 
-        material.setStatus(MaterialStatus.PROCESSING);
-        material.setErrorMessage(null);
+        material.setIndexingStatus(MaterialIndexingStatus.PENDING);
+        material.setIndexingErrorMessage(null);
         materialRepository.save(material);
     }
 

@@ -50,23 +50,38 @@ public class Material {
 
     private Integer pageCount;
 
+    // --- Task-generation pipeline state (StudyPlannerAgent) ---
+    // Owned exclusively by the agent path. The indexing pipeline below must not
+    // write these, or the two race over a single material.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MaterialStatus status;
 
-    private String filePath;
-
-    private String deviceFileUri;
-
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
-
-    @Builder.Default
-    private int retryCount = 0;
 
     private Instant processingStartedAt;
 
     private Instant processedAt;
+
+    // --- RAG indexing pipeline state (ScheduledProcessingService) ---
+    // Nullable rather than NOT NULL so the column can be added to a table that
+    // already has rows; a null value is treated as PENDING when polling.
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private MaterialIndexingStatus indexingStatus = MaterialIndexingStatus.PENDING;
+
+    @Column(columnDefinition = "TEXT")
+    private String indexingErrorMessage;
+
+    private Instant indexedAt;
+
+    @Builder.Default
+    private int retryCount = 0;
+
+    private String filePath;
+
+    private String deviceFileUri;
 
     @Column(nullable = false)
     private Instant uploadedAt;

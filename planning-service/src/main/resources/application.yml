@@ -9,12 +9,12 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
-  # WARNING: this block configures the spring-ai-starter-model-google-genai
-  # auto-configuration, which NO application code calls. The chat pipeline talks
-  # to Gemini through its own RestClient and reads the `gemini:` block below.
-  # Setting SPRING_AI_GOOGLE_GEMINI_API_KEY does NOT give the chat pipeline a key
-  # — it needs GEMINI_API_KEY. Kept only so the starter on the classpath can
-  # auto-configure; remove both this block and the dependency when convenient.
+  # Powers StudyPlannerAgent, which uses the Spring AI ChatClient to turn PDF text
+  # into study tasks. This is a SEPARATE Gemini path from the chat tutor, which
+  # talks to the REST API through its own RestClient and reads the `gemini:` block
+  # below. The two take different keys: this one SPRING_AI_GOOGLE_GEMINI_API_KEY,
+  # the tutor GEMINI_API_KEY. Setting one does not cover the other — task
+  # generation and chat fail independently.
   ai:
     google:
       genai:

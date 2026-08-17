@@ -7,12 +7,9 @@ import com.smartstudy.planning.ai.tool.PdfExtractorTool;
 import com.smartstudy.planning.ai.tool.SchedulerEngineTool;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.model.Course;
-import com.smartstudy.planning.model.Event;
-import com.smartstudy.planning.model.EventType;
 import com.smartstudy.planning.model.Priority;
 import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
-import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.TaskRepository;
 import com.smartstudy.shared.logging.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,14 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -45,17 +38,10 @@ public class StudyPlannerAgent {
     private final AiSchedulePersistenceService aiSchedulePersistenceService;
     private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
-    private final EventRepository eventRepository;
     private final TaskPriorityService taskPriorityService;
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper;
 
-    private static final int EXAM_HIGH_DAYS = 7;
-    private static final int EXAM_MEDIUM_DAYS = 14;
-    private static final int EVENT_SEARCH_WINDOW_DAYS = 14;
-    private static final int SCORE_LOW = 33;
-    private static final int SCORE_MEDIUM = 50;
-    private static final int SCORE_HIGH = 100;
     private static final int MIN_TASK_MINUTES = 15;
 
     public AgentPlanResult generatePlan(String userId, UUID courseId, UUID materialId,
@@ -65,18 +51,15 @@ public class StudyPlannerAgent {
             List<ExtractedTask> tasks = extractTasksFromText(rawText, materialId);
             tasks = applyLowerBoundAndMerge(tasks);
 
-            Course course = courseRepository.findByIdAndUserId(courseId, userId)
+            courseRepository.findByIdAndUserId(courseId, userId)
                     .orElseThrow(() -> new ResponseStatusException(
                             org.springframework.http.HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
-            LocalDate examDate = course.getExamDate() != null
-                    ? course.getExamDate().atZone(java.time.ZoneOffset.UTC).toLocalDate()
-                    : LocalDate.now().plusYears(1);
-            assignPriorities(userId, courseId, tasks, materialId, examDate);
 
             List<AvailableSlot> slots = calendarQuerierTool.query(
                     userId, courseId.toString(), dailyStudyMinutes, preferredDays);
 
             ScheduleResult scheduleResult = schedulerEngineTool.schedule(tasks, slots);
+            List<ScheduledPart> prioritizedParts = prioritizeScheduledParts(userId, courseId, scheduleResult.scheduledParts());
 
             if (scheduleResult.overCapacity()) {
                 log.warn("Over capacity for material {}: {} tasks unscheduled out of {}",
@@ -85,94 +68,12 @@ public class StudyPlannerAgent {
                         "Some study tasks could not be fitted before your exam date. No changes were made \u2014 consider adding more study days or increasing your daily study time."));
             }
 
-            aiSchedulePersistenceService.persist(userId, courseId, materialId, scheduleResult.scheduledParts(), isIncremental);
-            log.info("Plan generated successfully for material {}: {} parts scheduled", materialId, scheduleResult.scheduledParts().size());
+            aiSchedulePersistenceService.persist(userId, courseId, materialId, prioritizedParts, isIncremental);
+            log.info("Plan generated successfully for material {}: {} parts scheduled", materialId, prioritizedParts.size());
             return new AgentPlanResult("scheduled", new AlertResponse("Study tasks have been scheduled for " + materialId + "."));
         } catch (Exception ex) {
             log.error("Failed to generate plan for material {}: {}", materialId, ex.getMessage(), ex);
             return new AgentPlanResult("error", new AlertResponse("Failed to generate study plan: " + ex.getMessage()));
-        }
-    }
-
-    private void assignPriorities(String userId, UUID courseId, List<ExtractedTask> tasks, UUID materialId, LocalDate examDate) {
-        LocalDate today = LocalDate.now();
-        long daysToExam = ChronoUnit.DAYS.between(today, examDate);
-        int size = tasks.size();
-        if (size == 0) return;
-
-        int examScore = resolveExamProximityScore(daysToExam);
-
-        for (int i = 0; i < size; i++) {
-            ExtractedTask task = tasks.get(i);
-            LocalDate taskDate = today.plusDays(i);
-            Event nearestEvent = findNearestEvent(userId, courseId, taskDate, today);
-            int eventScore = resolveEventTypeScore(nearestEvent);
-            int finalScore = Math.max(examScore, eventScore);
-            Priority priority = scoreToPriority(finalScore);
-
-            tasks.set(i, new ExtractedTask(
-                    task.title(),
-                    task.estimatedMinutes(),
-                    task.sequenceOrder(),
-                    task.description(),
-                    task.coveredSections(),
-                    priority,
-                    task.materialId()
-            ));
-        }
-    }
-
-    private Event findNearestEvent(String userId, UUID courseId, LocalDate date, LocalDate today) {
-        if (userId == null) {
-            return null;
-        }
-        Instant windowStart = date.minusDays(3).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant windowEnd = date.plusDays(EVENT_SEARCH_WINDOW_DAYS)
-                .atStartOfDay(ZoneOffset.UTC).toInstant();
-
-        List<Event> events = courseId != null
-                ? eventRepository.findByUserIdAndCourseIdAndStartDateBetween(userId, courseId, windowStart, windowEnd)
-                : eventRepository.findByUserIdAndStartDateBetween(userId, windowStart, windowEnd);
-        if (events.isEmpty()) {
-            return null;
-        }
-        return events.stream()
-                .min(Comparator.comparing(e -> Math.abs(ChronoUnit.DAYS.between(date,
-                        e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate()))))
-                .orElse(null);
-    }
-
-    private int resolveExamProximityScore(long daysToExam) {
-        if (daysToExam <= EXAM_HIGH_DAYS) {
-            return SCORE_HIGH;
-        } else if (daysToExam <= EXAM_MEDIUM_DAYS) {
-            return SCORE_MEDIUM;
-        } else {
-            return SCORE_LOW;
-        }
-    }
-
-    private int resolveEventTypeScore(Event event) {
-        if (event == null || event.getEventType() == null) {
-            return SCORE_LOW;
-        }
-        Optional<EventType> eventType = EventType.fromWireValue(event.getEventType());
-        if (eventType.isEmpty()) {
-            return SCORE_LOW;
-        }
-        return switch (eventType.get()) {
-            case EXAM -> SCORE_HIGH;
-            case ASSIGNMENT, QUIZ, PROJECT, MIDTERM -> SCORE_MEDIUM;
-        };
-    }
-
-    private Priority scoreToPriority(int score) {
-        if (score < 34) {
-            return Priority.LOW;
-        } else if (score < 67) {
-            return Priority.MEDIUM;
-        } else {
-            return Priority.HIGH;
         }
     }
 
@@ -186,7 +87,7 @@ public class StudyPlannerAgent {
             }
 
             int totalRescheduled = 0;
-            LocalDate today = LocalDate.now();
+            int totalUnscheduled = 0;
 
             for (Course course : courses) {
                 MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, course.getId());
@@ -197,46 +98,31 @@ public class StudyPlannerAgent {
                 }
 
                 log.info("Performing full reschedule for course {} ({} missed tasks)", course.getId(), summary.missedCount());
-                aiSchedulePersistenceService.fullReschedule(userId, course.getId());
-
-                List<ExtractedTask> remainingTasks = new ArrayList<>();
-                for (int i = 0; i < incompleteTasks.size(); i++) {
-                    Task t = incompleteTasks.get(i);
-                    LocalDate estimatedDate = t.getScheduledDate() != null ? t.getScheduledDate() : today.plusDays(i);
-                    Priority freshPriority = taskPriorityService.determinePriority(userId, course.getId(), estimatedDate);
-
-                    remainingTasks.add(new ExtractedTask(
-                            t.getTitle(),
-                            t.getDurationMinutes(),
-                            t.getSequenceOrder() != null ? t.getSequenceOrder() : 0,
-                            t.getDescription(),
-                            t.getCoveredSections() != null ? List.of(t.getCoveredSections().split(",")) : List.of(),
-                            freshPriority,
-                            t.getMaterialId()
-                    ));
-                }
-
-                remainingTasks.sort(Comparator
-                        .comparing((ExtractedTask t) -> t.priority() != null ? t.priority().ordinal() : 0).reversed()
-                        .thenComparingInt(ExtractedTask::sequenceOrder));
-
-                List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
-                        userId, course.getId().toString(), dailyStudyMinutes, preferredDays);
-
-                ScheduleResult scheduleResult = schedulerEngineTool.schedule(remainingTasks, slots);
+                ScheduleResult scheduleResult = buildReschedule(userId, course.getId(), incompleteTasks,
+                        dailyStudyMinutes, preferredDays);
+                List<ScheduledPart> prioritizedParts = prioritizeScheduledParts(userId, course.getId(),
+                        scheduleResult.scheduledParts());
 
                 if (scheduleResult.overCapacity()) {
                     log.warn("Over capacity after reschedule for course {}: {} unscheduled", course.getId(), scheduleResult.unscheduledTasks().size());
-                    continue;
+                    totalUnscheduled += scheduleResult.unscheduledTasks().size();
                 }
 
-                aiSchedulePersistenceService.persist(userId, course.getId(), null, scheduleResult.scheduledParts(), false);
-                totalRescheduled += scheduleResult.scheduledParts().size();
+                aiSchedulePersistenceService.replaceTasks(userId, course.getId(), incompleteTasks, prioritizedParts);
+                totalRescheduled += prioritizedParts.size();
             }
 
             if (totalRescheduled > 0) {
-                return new AgentCheckResult("rescheduled", new AlertResponse(
-                        totalRescheduled + " study tasks were rescheduled across your roadmap."));
+                String message = totalRescheduled + " study tasks were rescheduled across your roadmap.";
+                if (totalUnscheduled > 0) {
+                    message += " " + totalUnscheduled + " tasks could not fit in your available study time; increase your daily minutes, add study days, or adjust deadlines.";
+                }
+                return new AgentCheckResult(totalUnscheduled > 0 ? "partial_reschedule" : "rescheduled",
+                        new AlertResponse(message));
+            }
+            if (totalUnscheduled > 0) {
+                return new AgentCheckResult("partial_reschedule", new AlertResponse(
+                        totalUnscheduled + " tasks could not fit in your available study time; increase your daily minutes, add study days, or adjust deadlines."));
             }
 
             return new AgentCheckResult("ok", null);
@@ -246,6 +132,83 @@ public class StudyPlannerAgent {
             log.error("Failed to check roadmap schedule: {}", ex.getMessage(), ex);
             return new AgentCheckResult("error", new AlertResponse("Roadmap schedule check failed: " + ex.getMessage()));
         }
+    }
+
+    public ScheduleResult rescheduleCourseTasks(String userId, UUID courseId, List<Task> tasks,
+                                                int dailyStudyMinutes, String preferredDays) {
+        return rescheduleCourseTasks(userId, courseId, tasks, dailyStudyMinutes, preferredDays, null);
+    }
+
+    public ScheduleResult rescheduleCourseTasks(String userId, UUID courseId, List<Task> tasks,
+                                                int dailyStudyMinutes, String preferredDays,
+                                                LocalDate deadlineExclusive) {
+        ScheduleResult scheduleResult = buildReschedule(userId, courseId, tasks, dailyStudyMinutes, preferredDays,
+                deadlineExclusive);
+        List<ScheduledPart> prioritizedParts = prioritizeScheduledParts(userId, courseId, scheduleResult.scheduledParts());
+        ScheduleResult prioritizedResult = new ScheduleResult(prioritizedParts,
+                scheduleResult.unscheduledTasks(), scheduleResult.overCapacity());
+        aiSchedulePersistenceService.replaceTasks(userId, courseId, tasks, prioritizedParts);
+        return prioritizedResult;
+    }
+
+    private ScheduleResult buildReschedule(String userId, UUID courseId, List<Task> tasks,
+                                           int dailyStudyMinutes, String preferredDays) {
+        return buildReschedule(userId, courseId, tasks, dailyStudyMinutes, preferredDays, null);
+    }
+
+    private ScheduleResult buildReschedule(String userId, UUID courseId, List<Task> tasks,
+                                           int dailyStudyMinutes, String preferredDays,
+                                           LocalDate deadlineExclusive) {
+        List<ExtractedTask> remainingTasks = tasks.stream()
+                .sorted(Comparator
+                        .comparing((Task task) -> task.getScheduledDate() != null ? task.getScheduledDate() : LocalDate.MAX)
+                        .thenComparing(task -> task.getSequenceOrder() != null ? task.getSequenceOrder() : 0)
+                        .thenComparing(Task::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(this::toExtractedTaskForReschedule)
+                .toList();
+
+        List<AvailableSlot> slots = calendarQuerierTool.query(
+                userId,
+                courseId.toString(),
+                dailyStudyMinutes,
+                preferredDays,
+                deadlineExclusive,
+                tasks.stream().map(Task::getId).toList());
+        return schedulerEngineTool.schedule(remainingTasks, slots);
+    }
+
+    private ExtractedTask toExtractedTaskForReschedule(Task task) {
+        return new ExtractedTask(
+                task.getTitle(),
+                task.getDurationMinutes(),
+                task.getSequenceOrder() != null ? task.getSequenceOrder() : 0,
+                task.getDescription(),
+                task.getCoveredSections() != null && !task.getCoveredSections().isBlank()
+                        ? List.of(task.getCoveredSections().split(","))
+                        : List.of(),
+                Priority.MEDIUM,
+                task.getMaterialId()
+        );
+    }
+
+    private List<ScheduledPart> prioritizeScheduledParts(String userId, UUID courseId, List<ScheduledPart> parts) {
+        return parts.stream()
+                .map(part -> {
+                    Priority priority = taskPriorityService.determinePriority(userId, courseId, part.date());
+                    return new ScheduledPart(
+                            part.title(),
+                            part.date(),
+                            part.minutes(),
+                            part.sequence(),
+                            part.splitPart(),
+                            part.totalParts(),
+                            part.description(),
+                            part.coveredSections(),
+                            priority,
+                            part.materialId()
+                    );
+                })
+                .toList();
     }
 
     private List<ExtractedTask> extractTasksFromText(String rawText, UUID materialId) {
@@ -359,4 +322,3 @@ public class StudyPlannerAgent {
                 combinedSections, firstPriority, group.get(0).materialId());
     }
 }
-

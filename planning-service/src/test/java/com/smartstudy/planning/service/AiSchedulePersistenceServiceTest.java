@@ -148,4 +148,38 @@ class AiSchedulePersistenceServiceTest {
         verify(taskRepository, times(2)).deleteAll(any());
         verify(eventRepository, times(2)).deleteAll(any());
     }
+
+    @Test
+    void replaceTasks_deletesOldTasksAndLinkedEventsBeforePersistingNewParts() {
+        UUID oldTaskId = UUID.randomUUID();
+        UUID oldEventId = UUID.randomUUID();
+        Task oldTask = Task.builder()
+                .id(oldTaskId)
+                .userId(USER_ID)
+                .courseId(COURSE_ID)
+                .title("Old task")
+                .durationMinutes(60)
+                .priority(Priority.MEDIUM)
+                .completed(false)
+                .scheduledDate(LocalDate.now())
+                .build();
+        Event linkedEvent = Event.builder()
+                .id(oldEventId)
+                .userId(USER_ID)
+                .courseId(COURSE_ID)
+                .taskId(oldTaskId)
+                .build();
+        stubSaves();
+
+        when(eventRepository.findByUserIdAndCourseIdAndTaskIdIsNotNull(USER_ID, COURSE_ID))
+                .thenReturn(List.of(linkedEvent));
+
+        service.replaceTasks(USER_ID, COURSE_ID, List.of(oldTask), List.of(
+                new ScheduledPart("New task", LocalDate.now().plusDays(1), 60, 1,
+                        null, null, null, List.of(), Priority.HIGH, null)));
+
+        verify(eventRepository).deleteAll(List.of(linkedEvent));
+        verify(taskRepository).deleteAll(List.of(oldTask));
+        assertEquals(Priority.HIGH, capturePersistedTasks().getFirst().getPriority());
+    }
 }

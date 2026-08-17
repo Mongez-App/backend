@@ -39,6 +39,7 @@ public class EventService {
     private final TaskRepository taskRepository;
     private final UserPreferencesService userPreferencesService;
     private final StudyPlannerAgent studyPlannerAgent;
+    private final TaskPriorityService taskPriorityService;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getEvents(String userId, GetEventsRequest request) {
@@ -171,7 +172,17 @@ public class EventService {
                 .build();
         Event saved = eventRepository.save(event);
 
+        if (eventType == EventType.EXAM) {
+            courseRepository.findByIdAndUserId(courseId, userId).ifPresent(course -> {
+                course.setExamDate(eventInstant);
+                courseRepository.save(course);
+            });
+        }
+
         ScheduleResult rescheduleResult = rescheduleCourseTasksBeforeEvent(saved);
+        if (eventType == EventType.EXAM) {
+            refreshMaterialTaskPriorities(userId, courseId);
+        }
         String message = eventType.label() + " added! Your AI roadmap has been updated with study tasks.";
         if (rescheduleResult != null && rescheduleResult.overCapacity()) {
             message += " " + rescheduleResult.unscheduledTasks().size()
@@ -214,6 +225,24 @@ public class EventService {
         log.info("Rescheduled {} task parts for course {} before event on {} ({} unscheduled)",
                 result.scheduledParts().size(), courseId, eventDate, result.unscheduledTasks().size());
         return result;
+    }
+
+    private void refreshMaterialTaskPriorities(String userId, UUID courseId) {
+        List<Task> tasks = taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId).stream()
+                .filter(task -> task.getMaterialId() != null)
+                .toList();
+
+        if (tasks.isEmpty()) {
+            return;
+        }
+
+        for (Task task : tasks) {
+            task.setPriority(taskPriorityService.determinePriority(userId, courseId, task.getScheduledDate()));
+        }
+
+        taskRepository.saveAll(tasks);
+        log.info("Refreshed priorities for {} material tasks in course {} after exam event creation",
+                tasks.size(), courseId);
     }
 
     private boolean rangesOverlap(Instant s1, Instant e1, UUID courseId1, Instant s2, Instant e2, UUID courseId2) {

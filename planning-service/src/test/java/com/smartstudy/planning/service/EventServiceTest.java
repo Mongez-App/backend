@@ -30,6 +30,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -55,6 +56,9 @@ class EventServiceTest {
     @Mock
     private StudyPlannerAgent studyPlannerAgent;
 
+    @Mock
+    private TaskPriorityService taskPriorityService;
+
     @InjectMocks
     private EventService eventService;
 
@@ -63,7 +67,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
-        reset(eventRepository, courseRepository, taskRepository, userPreferencesService, studyPlannerAgent);
+        reset(eventRepository, courseRepository, taskRepository, userPreferencesService, studyPlannerAgent, taskPriorityService);
         lenient().when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
             Event e = invocation.getArgument(0);
             if (e.getId() == null) {
@@ -71,6 +75,7 @@ class EventServiceTest {
             }
             return e;
         });
+        lenient().when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     // --- Non-course overlap ---
@@ -196,6 +201,42 @@ class EventServiceTest {
                 new CreateCourseEventRequest("Exam", EventType.EXAM.wireValue(), instant.toString()));
 
         assertTrue(response.message().contains("1 tasks could not fit"));
+    }
+
+    @Test
+    void testExamCourseEvent_refreshesMaterialTaskPrioritiesFromCourseExamDate() {
+        Instant examInstant = Instant.parse("2026-07-24T10:00:00Z");
+        Task task = createTask(LocalDate.of(2026, 7, 23));
+        task.setPriority(Priority.LOW);
+        Course course = Course.builder()
+                .id(courseId)
+                .userId(userId)
+                .name("Biology")
+                .startDate(Instant.parse("2026-07-01T00:00:00Z"))
+                .examDate(null)
+                .hidden(false)
+                .build();
+
+        when(courseRepository.findByIdAndUserId(courseId, userId)).thenReturn(Optional.of(course));
+        when(eventRepository.findOverlappingCourseEventsAt(eq(userId), eq(examInstant)))
+                .thenReturn(List.of());
+        when(taskRepository.findByUserIdAndCourseIdAndScheduledDateGreaterThanEqualAndLockedFalseAndCompletedFalseAndMissedFalse(
+                eq(userId), eq(courseId), eq(LocalDate.of(2026, 7, 24))))
+                .thenReturn(List.of());
+        when(taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId))
+                .thenReturn(List.of(task));
+        when(taskPriorityService.determinePriority(userId, courseId, task.getScheduledDate()))
+                .thenReturn(Priority.HIGH);
+
+        AlertResponse response = eventService.createCourseEvent(userId, courseId,
+                new CreateCourseEventRequest("Final Exam", EventType.EXAM.wireValue(), examInstant.toString()));
+
+        assertTrue(response.message().contains("Exam added"));
+        assertEquals(examInstant, course.getExamDate());
+        verify(taskRepository).saveAll(argThat(tasks -> {
+            List<Task> savedTasks = StreamSupport.stream(tasks.spliterator(), false).toList();
+            return savedTasks.size() == 1 && savedTasks.getFirst().getPriority() == Priority.HIGH;
+        }));
     }
 
     // --- System events ---

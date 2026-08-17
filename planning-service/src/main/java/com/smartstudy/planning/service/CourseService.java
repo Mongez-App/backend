@@ -73,6 +73,7 @@ public class CourseService {
     private final ChatMessageRepository chatMessageRepository;
     private final QdrantIndexingService qdrantIndexingService;
     private final StudyPlannerAgent studyPlannerAgent;
+    private final TaskPriorityService taskPriorityService;
     private final RestTemplateBuilder restTemplateBuilder;
     private final FileStorageService fileStorageService;
 
@@ -249,6 +250,7 @@ public class CourseService {
     public CourseResponse updateCourse(String userId, UUID courseId, UpdateCourseRequest request) {
         log.info("Updating course {} for userId: {}", courseId, userId);
         Course course = getStrictlyOwnedCourse(userId, courseId);
+        Instant previousExamDate = course.getExamDate();
         if (request.name() != null) {
             course.setName(request.name());
         }
@@ -272,6 +274,9 @@ public class CourseService {
         }
         if (request.hidden() != null) {
             course.setHidden(request.hidden());
+        }
+        if (request.examDate() != null && !request.examDate().equals(previousExamDate)) {
+            refreshMaterialTaskPriorities(userId, courseId);
         }
         return toResponse(userId, course, true, "Your roadmap was updated to reflect the course changes.");
     }
@@ -575,5 +580,23 @@ public class CourseService {
                 .durationMinutes(60)
                 .completed(false)
                 .build());
+    }
+
+    private void refreshMaterialTaskPriorities(String userId, UUID courseId) {
+        List<Task> tasks = taskRepository.findByUserIdAndCourseIdOrderByCreatedAtAsc(userId, courseId).stream()
+                .filter(task -> task.getMaterialId() != null)
+                .toList();
+
+        if (tasks.isEmpty()) {
+            return;
+        }
+
+        for (Task task : tasks) {
+            task.setPriority(taskPriorityService.determinePriority(userId, courseId, task.getScheduledDate()));
+        }
+
+        taskRepository.saveAll(tasks);
+        log.info("Refreshed priorities for {} material tasks in course {} after exam date change",
+                tasks.size(), courseId);
     }
 }

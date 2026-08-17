@@ -65,7 +65,7 @@ public class StudyPlannerAgent {
                 log.warn("Over capacity for material {}: {} tasks unscheduled out of {}",
                         materialId, scheduleResult.unscheduledTasks().size(), tasks.size());
                 return new AgentPlanResult("over_capacity", new AlertResponse(
-                        "Some study tasks could not be fitted before your exam date. No changes were made \u2014 consider adding more study days or increasing your daily study time."));
+                        "The generated study plan does not fit within your available study time. No tasks were created \u2014 consider adding more study days or increasing your daily study time."));
             }
 
             aiSchedulePersistenceService.persist(userId, courseId, materialId, prioritizedParts, isIncremental);

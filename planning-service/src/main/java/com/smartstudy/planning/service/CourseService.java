@@ -366,7 +366,6 @@ public class CourseService {
         saved.setStatus(MaterialStatus.PROCESSING);
         materialRepository.save(saved);
         triggerAgentForMaterial(userId, courseId, saved.getId(), dailyStudyMinutes, preferredDays);
-        rescheduleRoadmap(userId);
         return toMaterialResponse(saved);
     }
 
@@ -430,7 +429,6 @@ public class CourseService {
         materialRepository.save(material);
 
         triggerAgentForMaterial(userId, material.getCourseId(), materialId, dailyStudyMinutes, preferredDays);
-        rescheduleRoadmap(userId);
 
         return new UploadMaterialResponse(
                 materialId,
@@ -451,13 +449,22 @@ public class CourseService {
             boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
             AgentPlanResult result = studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
 
-            if ("error".equals(result.status())) {
+            if ("error".equals(result.status()) || "over_capacity".equals(result.status())) {
                 material.setStatus(MaterialStatus.FAILED);
                 log.error("Agent failed for material {}: {}", materialId, result.alert().message());
+                material.setErrorMessage(result.alert().message());
             } else {
                 material.setStatus(MaterialStatus.READY);
                 material.setProcessedAt(Instant.now());
                 log.info("Agent completed for material {}: status={}", materialId, result.status());
+
+                try {
+                    rescheduleRoadmap(userId);
+                } catch (Exception rescheduleEx) {
+                    // Keep the material processing result intact even if roadmap recalculation fails.
+                    log.warn("Roadmap reschedule failed after material {} processing: {}", materialId,
+                            rescheduleEx.getMessage(), rescheduleEx);
+                }
             }
             materialRepository.save(material);
         } catch (Exception ex) {

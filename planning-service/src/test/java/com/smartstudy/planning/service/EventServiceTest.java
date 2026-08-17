@@ -59,6 +59,9 @@ class EventServiceTest {
     @Mock
     private TaskPriorityService taskPriorityService;
 
+    @Mock
+    private RoadmapService roadmapService;
+
     @InjectMocks
     private EventService eventService;
 
@@ -67,7 +70,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
-        reset(eventRepository, courseRepository, taskRepository, userPreferencesService, studyPlannerAgent, taskPriorityService);
+        reset(eventRepository, courseRepository, taskRepository, userPreferencesService, studyPlannerAgent, taskPriorityService, roadmapService);
         lenient().when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
             Event e = invocation.getArgument(0);
             if (e.getId() == null) {
@@ -76,6 +79,10 @@ class EventServiceTest {
             return e;
         });
         lenient().when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(userPreferencesService.resolve(any(String.class)))
+                .thenReturn(new UserPreferencesService.StudyPreferences(60, java.util.EnumSet.allOf(java.time.DayOfWeek.class), 0, java.util.Set.of()));
+        lenient().when(roadmapService.reschedule(any(String.class), anyInt(), any(String.class)))
+                .thenReturn(null);
     }
 
     // --- Non-course overlap ---

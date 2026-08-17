@@ -20,11 +20,13 @@ import com.smartstudy.shared.logging.LoggerFactory;
 import com.smartstudy.identity.util.FieldMappingUtil;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -149,7 +151,24 @@ public class UserServiceImpl implements UserService {
 
         userPreferenceRepository.save(preference);
 
+        triggerRoadmapReschedule(firebaseUid, preference.getDailyStudyHours(), preference.getAvailableDays());
+
         return new com.smartstudy.identity.dto.response.PreferencesResponse("success", new com.smartstudy.identity.dto.response.PreferencesData(preference.getDailyStudyHours(), preference.getAvailableDays()));
+    }
+
+    @Async
+    void triggerRoadmapReschedule(String userId, Integer dailyStudyHours, List<com.smartstudy.identity.enums.WeekDay> availableDays) {
+        int minutes = dailyStudyHours != null ? dailyStudyHours * 60 : 0;
+        String daysCsv = availableDays == null || availableDays.isEmpty()
+                ? "MON,TUE,WED,THU,FRI,SAT,SUN"
+                : availableDays.stream()
+                .map(d -> d.getValue().toUpperCase())
+                .collect(Collectors.joining(","));
+        try {
+            planningServiceClient.rescheduleRoadmap(userId, minutes, daysCsv);
+        } catch (Exception ex) {
+            log.warn("Roadmap reschedule failed for user {}: {}", userId, ex.getMessage());
+        }
     }
 
     @Override

@@ -74,8 +74,10 @@ public class CourseService {
     private final QdrantIndexingService qdrantIndexingService;
     private final StudyPlannerAgent studyPlannerAgent;
     private final TaskPriorityService taskPriorityService;
+    private final UserPreferencesService userPreferencesService;
     private final RestTemplateBuilder restTemplateBuilder;
     private final FileStorageService fileStorageService;
+    private final RoadmapService roadmapService;
 
     @Value("${smartstudy.url-course.min-split-minutes:1}")
     private int minSplitMinutes;
@@ -134,6 +136,7 @@ public class CourseService {
         }
 
         createInitialStudyBlock(userId, saved);
+        rescheduleRoadmap(userId);
         return toResponse(userId, saved, false, "Your roadmap has been generated for " + saved.getName() + ".");
     }
 
@@ -302,6 +305,7 @@ public class CourseService {
         fileStorageService.deleteCourseDir(userId, courseId);
 
         courseRepository.delete(course);
+        rescheduleRoadmap(userId);
         return new StatusResponse("success", new AlertResponse(
                 course.getName() + " has been removed along with its materials, tasks, events, and roadmap."));
     }
@@ -445,13 +449,22 @@ public class CourseService {
             boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
             AgentPlanResult result = studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
 
-            if ("error".equals(result.status())) {
+            if ("error".equals(result.status()) || "over_capacity".equals(result.status())) {
                 material.setStatus(MaterialStatus.FAILED);
                 log.error("Agent failed for material {}: {}", materialId, result.alert().message());
+                material.setErrorMessage(result.alert().message());
             } else {
                 material.setStatus(MaterialStatus.READY);
                 material.setProcessedAt(Instant.now());
                 log.info("Agent completed for material {}: status={}", materialId, result.status());
+
+                try {
+                    rescheduleRoadmap(userId);
+                } catch (Exception rescheduleEx) {
+                    // Keep the material processing result intact even if roadmap recalculation fails.
+                    log.warn("Roadmap reschedule failed after material {} processing: {}", materialId,
+                            rescheduleEx.getMessage(), rescheduleEx);
+                }
             }
             materialRepository.save(material);
         } catch (Exception ex) {
@@ -474,6 +487,7 @@ public class CourseService {
         qdrantIndexingService.deleteByMaterialId(materialId);
         fileStorageService.delete(userId, courseId, materialId);
         materialRepository.delete(material);
+        rescheduleRoadmap(userId);
         return new StatusResponse("success",
                 new AlertResponse("The material and its tasks were removed from your roadmap."));
     }
@@ -580,6 +594,11 @@ public class CourseService {
                 .durationMinutes(60)
                 .completed(false)
                 .build());
+    }
+
+    private void rescheduleRoadmap(String userId) {
+        UserPreferencesService.StudyPreferences preferences = userPreferencesService.resolve(userId);
+        roadmapService.reschedule(userId, preferences.dailyStudyMinutes(), preferences.preferredDays());
     }
 
     private void refreshMaterialTaskPriorities(String userId, UUID courseId) {

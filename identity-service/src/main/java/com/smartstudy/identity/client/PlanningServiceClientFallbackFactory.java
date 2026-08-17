@@ -11,8 +11,12 @@ public class PlanningServiceClientFallbackFactory implements FallbackFactory<Pla
         return new PlanningServiceClient() {
             @Override
             public ProfileStatsResponse getUserStats(String uid) {
-                // Graceful degradation: return 0s if planning-service is down or endpoint doesn't exist
                 return new ProfileStatsResponse(0, 0, 0);
+            }
+
+            @Override
+            public void rescheduleRoadmap(String userId, int dailyStudyMinutes, String preferredDays) {
+                // Graceful degradation: skip reschedule if planning-service is unavailable
             }
         };
     }

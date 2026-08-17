@@ -124,4 +124,30 @@ public class AiSchedulePersistenceService {
         eventRepository.deleteAll(missedLinkedEvents);
         taskRepository.deleteAll(missedTasks);
     }
+
+    @Transactional
+    public void replaceTasks(String userId, UUID courseId, List<Task> tasksToReplace, List<ScheduledPart> parts) {
+        deleteTasks(userId, courseId, tasksToReplace);
+
+        if (!parts.isEmpty()) {
+            persist(userId, courseId, null, parts, false);
+        }
+    }
+
+    @Transactional
+    public void deleteTasks(String userId, UUID courseId, List<Task> tasksToReplace) {
+        if (tasksToReplace.isEmpty()) {
+            return;
+        }
+
+        List<UUID> taskIds = tasksToReplace.stream().map(Task::getId).toList();
+        List<Event> linkedEvents = eventRepository.findByUserIdAndCourseIdAndTaskIdIsNotNull(userId, courseId)
+                .stream()
+                .filter(event -> event.getTaskId() != null && taskIds.contains(event.getTaskId()))
+                .toList();
+
+        log.info("Replacing {} tasks and {} linked events for course {}", tasksToReplace.size(), linkedEvents.size(), courseId);
+        eventRepository.deleteAll(linkedEvents);
+        taskRepository.deleteAll(tasksToReplace);
+    }
 }

@@ -39,17 +39,15 @@ public class TaskPriorityService {
     private final EventRepository eventRepository;
 
     public Priority determinePriority(String userId, UUID courseId, LocalDate scheduledDate) {
-        LocalDate today = LocalDate.now();
-
         int daysToExam = Integer.MAX_VALUE;
         if (courseId != null) {
-            daysToExam = computeDaysToExam(courseId, scheduledDate, today);
+            daysToExam = computeDaysToExam(courseId, scheduledDate);
         }
 
-        Event nearestEvent = findNearestEvent(userId, courseId, scheduledDate, today);
+        Event nearestEvent = findNearestEvent(userId, courseId, scheduledDate);
 
         int examScore = resolveExamProximityScore(daysToExam);
-        int eventScore = resolveEventTypeScore(nearestEvent);
+        int eventScore = resolveEventTypeScore(nearestEvent, scheduledDate);
 
         int finalScore = Math.max(examScore, eventScore);
         Priority priority = scoreToPriority(finalScore);
@@ -61,15 +59,15 @@ public class TaskPriorityService {
         return priority;
     }
 
-    private int computeDaysToExam(UUID courseId, LocalDate scheduledDate, LocalDate today) {
+    private int computeDaysToExam(UUID courseId, LocalDate scheduledDate) {
         return courseRepository.findById(courseId)
                 .map(Course::getExamDate)
                 .map(instant -> instant.atZone(ZoneOffset.UTC).toLocalDate())
-                .map(examDate -> (int) ChronoUnit.DAYS.between(today, examDate))
+                .map(examDate -> (int) ChronoUnit.DAYS.between(scheduledDate, examDate))
                 .orElse(Integer.MAX_VALUE);
     }
 
-    private Event findNearestEvent(String userId, UUID courseId, LocalDate scheduledDate, LocalDate today) {
+    private Event findNearestEvent(String userId, UUID courseId, LocalDate scheduledDate) {
         Instant windowStart = scheduledDate.minusDays(3).atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant windowEnd = scheduledDate.plusDays(EVENT_SEARCH_WINDOW_DAYS)
                 .atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -88,17 +86,20 @@ public class TaskPriorityService {
                 .orElse(null);
     }
 
-    private int resolveExamProximityScore(int daysToExam) {
-        if (daysToExam <= EXAM_HIGH_DAYS) {
+    private int resolveExamProximityScore(int daysUntilExam) {
+        if (daysUntilExam < 0) {
+            return SCORE_LOW;
+        }
+        if (daysUntilExam <= EXAM_HIGH_DAYS) {
             return SCORE_HIGH_EXAM;
-        } else if (daysToExam <= EXAM_MEDIUM_DAYS) {
+        } else if (daysUntilExam <= EXAM_MEDIUM_DAYS) {
             return SCORE_MEDIUM;
         } else {
             return SCORE_LOW;
         }
     }
 
-    private int resolveEventTypeScore(Event event) {
+    private int resolveEventTypeScore(Event event, LocalDate scheduledDate) {
         if (event == null || event.getEventType() == null) {
             return SCORE_LOW;
         }
@@ -108,9 +109,12 @@ public class TaskPriorityService {
             return SCORE_LOW;
         }
 
+        LocalDate eventDate = event.getStartDate().atZone(ZoneOffset.UTC).toLocalDate();
+        long daysFromEvent = Math.abs(ChronoUnit.DAYS.between(scheduledDate, eventDate));
+
         return switch (eventType.get()) {
-            case EXAM -> SCORE_HIGH_EVENT;
-            case ASSIGNMENT, QUIZ, PROJECT, MIDTERM -> SCORE_MEDIUM;
+            case EXAM, MIDTERM -> daysFromEvent <= EXAM_HIGH_DAYS ? SCORE_HIGH_EVENT : SCORE_MEDIUM;
+            case ASSIGNMENT, QUIZ, PROJECT -> SCORE_MEDIUM;
         };
     }
 

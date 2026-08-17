@@ -135,7 +135,7 @@ class TaskPriorityServiceTest {
     }
 
     @Test
-    void testMediumPriority_whenNearestEventIsMidterm() {
+    void testHighPriority_whenNearestEventIsMidterm() {
         when(courseRepository.findById(courseId))
                 .thenReturn(Optional.of(createCourse(today.plusDays(30))));
         when(eventRepository.findByUserIdAndCourseIdAndStartDateBetween(eq(userId), eq(courseId), any(), any()))
@@ -143,7 +143,7 @@ class TaskPriorityServiceTest {
 
         Priority priority = taskPriorityService.determinePriority(userId, courseId, today);
 
-        assertEquals(Priority.MEDIUM, priority);
+        assertEquals(Priority.HIGH, priority);
     }
 
     @Test

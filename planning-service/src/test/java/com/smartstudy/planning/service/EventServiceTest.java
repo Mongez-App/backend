@@ -1,13 +1,18 @@
 package com.smartstudy.planning.service;
 
+import com.smartstudy.planning.ai.model.ExtractedTask;
+import com.smartstudy.planning.ai.model.ScheduleResult;
 import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.request.CreateEventRequest;
 import com.smartstudy.planning.dto.request.CreateEventsRequest;
+import com.smartstudy.planning.ai.model.ScheduledPart;
 import com.smartstudy.planning.dto.response.AlertResponse;
 import com.smartstudy.planning.dto.response.EventsResponse;
 import com.smartstudy.planning.model.Course;
 import com.smartstudy.planning.model.Event;
 import com.smartstudy.planning.model.EventType;
+import com.smartstudy.planning.model.Priority;
+import com.smartstudy.planning.model.Task;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
 import com.smartstudy.planning.repository.TaskRepository;
@@ -44,6 +49,12 @@ class EventServiceTest {
     @Mock
     private TaskRepository taskRepository;
 
+    @Mock
+    private UserPreferencesService userPreferencesService;
+
+    @Mock
+    private StudyPlannerAgent studyPlannerAgent;
+
     @InjectMocks
     private EventService eventService;
 
@@ -52,7 +63,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
-        reset(eventRepository, courseRepository, taskRepository);
+        reset(eventRepository, courseRepository, taskRepository, userPreferencesService, studyPlannerAgent);
         lenient().when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
             Event e = invocation.getArgument(0);
             if (e.getId() == null) {
@@ -130,6 +141,61 @@ class EventServiceTest {
         AlertResponse response = eventService.createCourseEvent(userId, courseId, request);
         assertNotNull(response);
         assertTrue(response.message().contains("Exam added"));
+    }
+
+    @Test
+    void testCourseEvent_reschedulesRemainingTasksUsingUserPreferences() {
+        Instant instant = Instant.parse("2026-07-24T10:00:00Z");
+        Task task = createTask(LocalDate.of(2026, 7, 24));
+        ScheduleResult result = new ScheduleResult(List.of(
+                new ScheduledPart("Chapter 1", LocalDate.of(2026, 7, 21), 45, 1,
+                        null, null, null, List.of(), Priority.HIGH, task.getMaterialId())
+        ), List.of(), false);
+
+        when(eventRepository.findOverlappingCourseEventsAt(eq(userId), eq(instant)))
+                .thenReturn(List.of());
+        when(taskRepository.findByUserIdAndCourseIdAndScheduledDateGreaterThanEqualAndLockedFalseAndCompletedFalseAndMissedFalse(
+                eq(userId), eq(courseId), eq(LocalDate.of(2026, 7, 24))))
+                .thenReturn(List.of(task));
+        when(userPreferencesService.resolve(userId))
+                .thenReturn(new UserPreferencesService.StudyPreferences(45,
+                        java.util.Set.of(java.time.DayOfWeek.TUESDAY), 0, java.util.Set.of()));
+        when(studyPlannerAgent.rescheduleCourseTasks(eq(userId), eq(courseId), eq(List.of(task)), eq(45), eq("TUE"),
+                eq(LocalDate.of(2026, 7, 24))))
+                .thenReturn(result);
+
+        AlertResponse response = eventService.createCourseEvent(userId, courseId,
+                new CreateCourseEventRequest("Exam", EventType.EXAM.wireValue(), instant.toString()));
+
+        assertTrue(response.message().contains("Exam added"));
+        verify(studyPlannerAgent).rescheduleCourseTasks(userId, courseId, List.of(task), 45, "TUE",
+                LocalDate.of(2026, 7, 24));
+    }
+
+    @Test
+    void testCourseEvent_alertExplainsPartialReschedule() {
+        Instant instant = Instant.parse("2026-07-24T10:00:00Z");
+        Task task = createTask(LocalDate.of(2026, 7, 24));
+        ExtractedTask unscheduled = new ExtractedTask("Chapter 2", 60, 2, null, List.of(),
+                Priority.MEDIUM, task.getMaterialId());
+        ScheduleResult result = new ScheduleResult(List.of(), List.of(unscheduled), true);
+
+        when(eventRepository.findOverlappingCourseEventsAt(eq(userId), eq(instant)))
+                .thenReturn(List.of());
+        when(taskRepository.findByUserIdAndCourseIdAndScheduledDateGreaterThanEqualAndLockedFalseAndCompletedFalseAndMissedFalse(
+                eq(userId), eq(courseId), eq(LocalDate.of(2026, 7, 24))))
+                .thenReturn(List.of(task));
+        when(userPreferencesService.resolve(userId))
+                .thenReturn(new UserPreferencesService.StudyPreferences(30,
+                        java.util.Set.of(java.time.DayOfWeek.MONDAY), 0, java.util.Set.of()));
+        when(studyPlannerAgent.rescheduleCourseTasks(eq(userId), eq(courseId), eq(List.of(task)), eq(30), eq("MON"),
+                eq(LocalDate.of(2026, 7, 24))))
+                .thenReturn(result);
+
+        AlertResponse response = eventService.createCourseEvent(userId, courseId,
+                new CreateCourseEventRequest("Exam", EventType.EXAM.wireValue(), instant.toString()));
+
+        assertTrue(response.message().contains("1 tasks could not fit"));
     }
 
     // --- System events ---
@@ -256,5 +322,22 @@ class EventServiceTest {
         event.setEventType(EventType.EXAM.wireValue());
         event.setCanStudyThrough(false);
         return event;
+    }
+
+    private Task createTask(LocalDate scheduledDate) {
+        return Task.builder()
+                .id(UUID.randomUUID())
+                .userId(userId)
+                .courseId(courseId)
+                .materialId(UUID.randomUUID())
+                .title("Chapter 1")
+                .durationMinutes(45)
+                .priority(Priority.MEDIUM)
+                .completed(false)
+                .scheduledDate(scheduledDate)
+                .sequenceOrder(1)
+                .locked(false)
+                .missed(false)
+                .build();
     }
 }

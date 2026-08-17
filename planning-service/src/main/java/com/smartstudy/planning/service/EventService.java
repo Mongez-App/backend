@@ -1,5 +1,6 @@
 package com.smartstudy.planning.service;
 
+import com.smartstudy.planning.ai.model.ScheduleResult;
 import com.smartstudy.planning.dto.request.CreateCourseEventRequest;
 import com.smartstudy.planning.dto.request.CreateEventRequest;
 import com.smartstudy.planning.dto.request.GetEventsRequest;
@@ -25,11 +26,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +37,8 @@ public class EventService {
     private final EventRepository eventRepository;
     private final CourseRepository courseRepository;
     private final TaskRepository taskRepository;
+    private final UserPreferencesService userPreferencesService;
+    private final StudyPlannerAgent studyPlannerAgent;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getEvents(String userId, GetEventsRequest request) {
@@ -171,10 +171,14 @@ public class EventService {
                 .build();
         Event saved = eventRepository.save(event);
 
-        rescheduleCourseTasksBeforeEvent(saved);
+        ScheduleResult rescheduleResult = rescheduleCourseTasksBeforeEvent(saved);
+        String message = eventType.label() + " added! Your AI roadmap has been updated with study tasks.";
+        if (rescheduleResult != null && rescheduleResult.overCapacity()) {
+            message += " " + rescheduleResult.unscheduledTasks().size()
+                    + " tasks could not fit in your available study time; increase your daily minutes, add study days, or adjust deadlines.";
+        }
 
-        return new AlertResponse(eventType.label()
-                + " added! Your AI roadmap has been updated with study tasks.");
+        return new AlertResponse(message);
     }
 
     /** POST /courses/{id}/events takes an ISO-8601 UTC instant, e.g. 2026-07-24T20:00:00Z. */
@@ -187,7 +191,7 @@ public class EventService {
         }
     }
 
-    private void rescheduleCourseTasksBeforeEvent(Event event) {
+    private ScheduleResult rescheduleCourseTasksBeforeEvent(Event event) {
         LocalDate eventDate = event.getStartDate().atZone(ZoneOffset.UTC).toLocalDate();
         UUID courseId = event.getCourseId();
         String userId = event.getUserId();
@@ -198,56 +202,18 @@ public class EventService {
 
         if (tasksToReschedule.isEmpty()) {
             log.info("No tasks to reschedule for course {} before event on {}", courseId, eventDate);
-            return;
+            return null;
         }
 
         log.info("Rescheduling {} tasks for course {} before event on {}",
                 tasksToReschedule.size(), courseId, eventDate);
 
-        Map<UUID, List<Task>> byMaterial = tasksToReschedule.stream()
-                .collect(Collectors.groupingBy(t -> t.getMaterialId() != null ? t.getMaterialId() : UUID.randomUUID()));
-
-        List<Task> updatedTasks = new ArrayList<>();
-        LocalDate assignmentDate = eventDate.minusDays(1);
-
-        List<UUID> materialKeys = new ArrayList<>(byMaterial.keySet());
-        materialKeys.sort((a, b) -> {
-            List<Task> tasksA = byMaterial.get(a);
-            List<Task> tasksB = byMaterial.get(b);
-            int minSeqA = tasksA.stream().mapToInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0).min().orElse(0);
-            int minSeqB = tasksB.stream().mapToInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0).min().orElse(0);
-            return Integer.compare(minSeqA, minSeqB);
-        });
-
-        for (UUID materialKey : materialKeys) {
-            List<Task> materialTasks = byMaterial.get(materialKey);
-            materialTasks.sort(Comparator.comparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0));
-
-            for (Task task : materialTasks) {
-                LocalDate nearestEventDate = findNearestEventDateAfter(userId, courseId, eventDate, task.getScheduledDate());
-                if (nearestEventDate != null && assignmentDate.isAfter(nearestEventDate)) {
-                    assignmentDate = nearestEventDate.minusDays(1);
-                }
-                task.setScheduledDate(assignmentDate);
-                updatedTasks.add(task);
-                assignmentDate = assignmentDate.minusDays(1);
-            }
-        }
-
-        taskRepository.saveAll(updatedTasks);
-        log.info("Rescheduled {} tasks for course {} before event on {}",
-                updatedTasks.size(), courseId, eventDate);
-    }
-
-    private LocalDate findNearestEventDateAfter(String userId, UUID courseId, LocalDate fromDate, LocalDate taskDate) {
-        LocalDate nearestEventDate = eventRepository.findFirstByUserIdAndCourseIdAndStartDateAfterOrderByStartDateAsc(
-                userId, courseId, fromDate.atStartOfDay().toInstant(ZoneOffset.UTC))
-                .map(e -> e.getStartDate().atZone(ZoneOffset.UTC).toLocalDate())
-                .orElse(null);
-        if (nearestEventDate != null && nearestEventDate.isBefore(taskDate)) {
-            return null;
-        }
-        return nearestEventDate;
+        UserPreferencesService.StudyPreferences preferences = userPreferencesService.resolve(userId);
+        ScheduleResult result = studyPlannerAgent.rescheduleCourseTasks(userId, courseId, tasksToReschedule,
+                preferences.dailyStudyMinutes(), preferences.preferredDays(), eventDate);
+        log.info("Rescheduled {} task parts for course {} before event on {} ({} unscheduled)",
+                result.scheduledParts().size(), courseId, eventDate, result.unscheduledTasks().size());
+        return result;
     }
 
     private boolean rangesOverlap(Instant s1, Instant e1, UUID courseId1, Instant s2, Instant e2, UUID courseId2) {

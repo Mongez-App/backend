@@ -14,9 +14,12 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
@@ -33,8 +36,19 @@ public class CalendarQuerierTool {
 
     @Tool(name = "query_available_slots", description = "Query available study slots between now and the exam date based on preferred study days and daily time budget. Input: userId, courseId, dailyStudyMinutes, preferredDays (comma-separated MON,WED,FRI). Returns list of AvailableSlot records.")
     public List<AvailableSlot> query(String userId, String courseId, int dailyStudyMinutes, String preferredDays) {
+        return query(userId, courseId, dailyStudyMinutes, preferredDays, null);
+    }
+
+    public List<AvailableSlot> query(String userId, String courseId, int dailyStudyMinutes, String preferredDays,
+                                     LocalDate endDateExclusive) {
+        return query(userId, courseId, dailyStudyMinutes, preferredDays, endDateExclusive, Set.of());
+    }
+
+    public List<AvailableSlot> query(String userId, String courseId, int dailyStudyMinutes, String preferredDays,
+                                     LocalDate endDateExclusive, Collection<UUID> ignoredTaskIds) {
         java.util.UUID parsedCourseId = java.util.UUID.fromString(courseId);
         Set<DayOfWeek> preferred = parsePreferredDays(preferredDays);
+        Set<UUID> ignoredIds = ignoredTaskIds != null ? new HashSet<>(ignoredTaskIds) : Set.of();
         LocalDate today = LocalDate.now();
         LocalDate startDate = LocalTime.now().isBefore(LocalTime.of(14, 0)) ? today : today.plusDays(1);
         Course course = courseRepository.findByIdAndUserId(parsedCourseId, userId)
@@ -42,15 +56,19 @@ public class CalendarQuerierTool {
         LocalDate examDate = course.getExamDate() != null
                 ? course.getExamDate().atZone(java.time.ZoneOffset.UTC).toLocalDate()
                 : LocalDate.now().plusYears(1);
+        LocalDate scheduleEndDate = endDateExclusive != null && endDateExclusive.isBefore(examDate)
+                ? endDateExclusive
+                : examDate;
 
         List<AvailableSlot> slots = new ArrayList<>();
-        for (LocalDate date = startDate; date.isBefore(examDate); date = date.plusDays(1)) {
+        for (LocalDate date = startDate; date.isBefore(scheduleEndDate); date = date.plusDays(1)) {
             if (!preferred.contains(date.getDayOfWeek())) {
                 continue;
             }
 
             int alreadyBooked = taskRepository.findByUserIdAndCourseIdAndScheduledDateAndCompletedFalseAndMissedFalse(userId, parsedCourseId, date)
                     .stream()
+                    .filter(task -> task.getId() == null || !ignoredIds.contains(task.getId()))
                     .mapToInt(Task::getDurationMinutes)
                     .sum();
 

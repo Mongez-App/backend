@@ -46,6 +46,7 @@ public class StudyPlannerAgent {
     private final TaskRepository taskRepository;
     private final CourseRepository courseRepository;
     private final EventRepository eventRepository;
+    private final TaskPriorityService taskPriorityService;
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper;
 
@@ -185,27 +186,39 @@ public class StudyPlannerAgent {
             }
 
             int totalRescheduled = 0;
+            LocalDate today = LocalDate.now();
 
             for (Course course : courses) {
                 MissedTaskSummary summary = missedTaskDetectorTool.detect(userId, course.getId());
 
-                if (summary.missedCount() == 0 || !summary.requiresFullReschedule()) {
+                List<Task> incompleteTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, course.getId());
+                if (incompleteTasks.isEmpty()) {
                     continue;
                 }
 
                 log.info("Performing full reschedule for course {} ({} missed tasks)", course.getId(), summary.missedCount());
                 aiSchedulePersistenceService.fullReschedule(userId, course.getId());
 
-                List<ExtractedTask> remainingTasks = taskRepository.findByUserIdAndCourseIdAndCompletedFalse(userId, course.getId())
-                        .stream()
-                        .sorted(Comparator
-                                .comparing((Task t) -> t.getPriority() != null ? t.getPriority().ordinal() : 0).reversed()
-                                .thenComparingInt(t -> t.getSequenceOrder() != null ? t.getSequenceOrder() : 0))
-                        .map(t -> new ExtractedTask(t.getTitle(), t.getDurationMinutes(),
-                                t.getSequenceOrder() != null ? t.getSequenceOrder() : 0,
-                                t.getDescription(), t.getCoveredSections() != null ? List.of(t.getCoveredSections().split(",")) : List.of(),
-                                t.getPriority(), t.getMaterialId()))
-                        .toList();
+                List<ExtractedTask> remainingTasks = new ArrayList<>();
+                for (int i = 0; i < incompleteTasks.size(); i++) {
+                    Task t = incompleteTasks.get(i);
+                    LocalDate estimatedDate = t.getScheduledDate() != null ? t.getScheduledDate() : today.plusDays(i);
+                    Priority freshPriority = taskPriorityService.determinePriority(userId, course.getId(), estimatedDate);
+
+                    remainingTasks.add(new ExtractedTask(
+                            t.getTitle(),
+                            t.getDurationMinutes(),
+                            t.getSequenceOrder() != null ? t.getSequenceOrder() : 0,
+                            t.getDescription(),
+                            t.getCoveredSections() != null ? List.of(t.getCoveredSections().split(",")) : List.of(),
+                            freshPriority,
+                            t.getMaterialId()
+                    ));
+                }
+
+                remainingTasks.sort(Comparator
+                        .comparing((ExtractedTask t) -> t.priority() != null ? t.priority().ordinal() : 0).reversed()
+                        .thenComparingInt(ExtractedTask::sequenceOrder));
 
                 List<com.smartstudy.planning.ai.model.AvailableSlot> slots = calendarQuerierTool.query(
                         userId, course.getId().toString(), dailyStudyMinutes, preferredDays);
@@ -218,12 +231,12 @@ public class StudyPlannerAgent {
                 }
 
                 aiSchedulePersistenceService.persist(userId, course.getId(), null, scheduleResult.scheduledParts(), false);
-                totalRescheduled += summary.missedCount();
+                totalRescheduled += scheduleResult.scheduledParts().size();
             }
 
             if (totalRescheduled > 0) {
                 return new AgentCheckResult("rescheduled", new AlertResponse(
-                        totalRescheduled + " missed tasks were rescheduled across your roadmap."));
+                        totalRescheduled + " study tasks were rescheduled across your roadmap."));
             }
 
             return new AgentCheckResult("ok", null);

@@ -2,6 +2,7 @@ package com.smartstudy.planning.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartstudy.planning.ai.model.AvailableSlot;
+import com.smartstudy.planning.ai.model.ExtractedTask;
 import com.smartstudy.planning.ai.model.ScheduleResult;
 import com.smartstudy.planning.ai.model.ScheduledPart;
 import com.smartstudy.planning.ai.tool.CalendarQuerierTool;
@@ -59,6 +60,13 @@ class StudyPlannerAgentTest {
         return captor.getValue();
     }
 
+    @SuppressWarnings("unchecked")
+    private List<ExtractedTask> captureScheduledTasks() {
+        ArgumentCaptor<List<ExtractedTask>> captor = ArgumentCaptor.forClass(List.class);
+        verify(schedulerEngineTool).schedule(captor.capture(), anyList());
+        return captor.getValue();
+    }
+
     @Test
     void rescheduleCourseTasks_schedulesOnlyWhatFitsInAvailableSlots() {
         LocalDate studyDay = LocalDate.now().plusDays(1);
@@ -101,6 +109,26 @@ class StudyPlannerAgentTest {
         List<ScheduledPart> persistedParts = captureReplacementParts();
         assertEquals(Priority.HIGH, persistedParts.get(0).priority());
         assertEquals(Priority.LOW, persistedParts.get(1).priority());
+    }
+
+    @Test
+    void rescheduleCourseTasks_keepsTheTaskPriorityWhenBuildingSchedulerInput() {
+        LocalDate studyDay = LocalDate.now().plusDays(1);
+        Task first = task("Chapter 1", 40, 1);
+        first.setPriority(Priority.HIGH);
+        Task second = task("Chapter 2", 40, 2);
+        second.setPriority(Priority.LOW);
+
+        when(calendarQuerierTool.query(eq(USER_ID), eq(COURSE_ID.toString()), eq(40), eq("MON"), eq(null), anyList()))
+                .thenReturn(List.of(new AvailableSlot(studyDay, 80)));
+        when(taskPriorityService.determinePriority(USER_ID, COURSE_ID, studyDay))
+                .thenReturn(Priority.HIGH);
+
+        studyPlannerAgent.rescheduleCourseTasks(USER_ID, COURSE_ID, List.of(first, second), 40, "MON");
+
+        List<ExtractedTask> extractedTasks = captureScheduledTasks();
+        assertEquals(Priority.HIGH, extractedTasks.get(0).priority());
+        assertEquals(Priority.LOW, extractedTasks.get(1).priority());
     }
 
     private Task task(String title, int minutes, int sequence) {

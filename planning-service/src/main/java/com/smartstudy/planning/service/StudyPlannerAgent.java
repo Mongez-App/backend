@@ -186,7 +186,7 @@ public class StudyPlannerAgent {
                 task.getCoveredSections() != null && !task.getCoveredSections().isBlank()
                         ? List.of(task.getCoveredSections().split(","))
                         : List.of(),
-                Priority.MEDIUM,
+                task.getPriority() != null ? task.getPriority() : Priority.MEDIUM,
                 task.getMaterialId()
         );
     }

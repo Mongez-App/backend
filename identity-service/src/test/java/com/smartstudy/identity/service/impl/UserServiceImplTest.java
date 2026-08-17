@@ -1,5 +1,6 @@
 package com.smartstudy.identity.service.impl;
 
+import com.smartstudy.identity.client.PlanningServiceClient;
 import com.smartstudy.identity.dto.request.SavePreferencesRequest;
 import com.smartstudy.identity.dto.response.PreferencesResponse;
 import com.smartstudy.identity.enums.WeekDay;
@@ -30,6 +31,9 @@ class UserServiceImplTest {
 
     @Mock
     private UserPreferenceRepository userPreferenceRepository;
+
+    @Mock
+    private PlanningServiceClient planningServiceClient;
 
     @InjectMocks
     private UserServiceImpl userService;

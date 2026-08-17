@@ -40,6 +40,7 @@ public class EventService {
     private final UserPreferencesService userPreferencesService;
     private final StudyPlannerAgent studyPlannerAgent;
     private final TaskPriorityService taskPriorityService;
+    private final RoadmapService roadmapService;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getEvents(String userId, GetEventsRequest request) {
@@ -183,6 +184,10 @@ public class EventService {
         if (eventType == EventType.EXAM) {
             refreshMaterialTaskPriorities(userId, courseId);
         }
+
+        UserPreferencesService.StudyPreferences preferences = userPreferencesService.resolve(userId);
+        roadmapService.reschedule(userId, preferences.dailyStudyMinutes(), preferences.preferredDays());
+
         String message = eventType.label() + " added! Your AI roadmap has been updated with study tasks.";
         if (rescheduleResult != null && rescheduleResult.overCapacity()) {
             message += " " + rescheduleResult.unscheduledTasks().size()

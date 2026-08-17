@@ -104,6 +104,7 @@ public class OrganizationAdminService {
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
     private final IdentityServiceClient identityServiceClient;
+    private final OrganizationNameResolver organizationNameResolver;
 
     // ------------------------------------------------------------------
     // Teams
@@ -134,10 +135,13 @@ public class OrganizationAdminService {
         if (teamRepository.existsByOrganizationIdAndNameIgnoreCase(orgId, request.name().trim())) {
             throw OrgApiException.conflict("A team with this name already exists.");
         }
+        // X-User-Id gives us the organization's uid, not its name; the name lives in
+        // identity-service and is copied here once, at creation.
         Team team = Team.builder()
                 .id(UUID.randomUUID().toString())
                 .name(request.name().trim())
                 .organizationId(orgId)
+                .organizationName(organizationNameResolver.resolve(orgId))
                 .ownerId(orgId)
                 .imageUrl(request.photoUrl())
                 .inviteCode(resolveInviteCode(request.inviteCode()))

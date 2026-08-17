@@ -1,6 +1,7 @@
 package com.smartstudy.planning.controller;
 
 import com.smartstudy.planning.exception.OrgApiException;
+import com.smartstudy.planning.exception.OrganizationLookupUnavailableException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,14 @@ public class OrganizationApiExceptionHandler {
     public ResponseEntity<OrgErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
                 .body(new OrgErrorResponse("ValidationError", "Request body is missing or malformed."));
+    }
+
+    @ExceptionHandler(OrganizationLookupUnavailableException.class)
+    public ResponseEntity<OrgErrorResponse> handleOrgLookupUnavailable(OrganizationLookupUnavailableException ex) {
+        log.error("Organization lookup unavailable: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new OrgErrorResponse("ServiceUnavailable",
+                        "Could not reach the identity service to resolve your organization. Please try again."));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

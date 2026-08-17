@@ -44,6 +44,7 @@ public class TeamService {
     private final CourseRepository courseRepository;
     private final EventRepository eventRepository;
     private final TaskRepository taskRepository;
+    private final OrganizationNameResolver organizationNameResolver;
 
     public List<TeamResponse> getUserTeams(String userId, String orgId) {
         log.info("Fetching teams for userId: {} in org: {}", userId, orgId);
@@ -286,11 +287,13 @@ public class TeamService {
                 throw new ConflictException("INVITE_CODE_EXISTS", "Invite code already in use.");
             }
         }
+        // Resolves to null when orgId is not an organization account, which is the
+        // normal case for a user-created team.
         Team team = Team.builder()
                 .id(UUID.randomUUID().toString())
                 .name(request.name())
                 .organizationId(orgId)
-                .organizationName(null)
+                .organizationName(organizationNameResolver.resolve(orgId))
                 .imageUrl(request.imageUrl())
                 .inviteCode(inviteCode)
                 .build();

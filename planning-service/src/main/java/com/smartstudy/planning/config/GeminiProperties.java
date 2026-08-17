@@ -28,7 +28,9 @@ public record GeminiProperties(
 
     public record ChatConfig(String model, int maxOutputTokens, double temperature) {
         public ChatConfig {
-            if (model == null) model = "gemini-2.0-flash";
+            // Keep in step with the default in application.yml — a retired ID here
+            // 404s the whole Gemini chain and silently hands chat to OpenRouter.
+            if (model == null) model = "gemini-3.5-flash-lite";
             if (maxOutputTokens <= 0) maxOutputTokens = 2048;
             if (temperature < 0) temperature = 0.3;
         }

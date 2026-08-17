@@ -48,12 +48,17 @@ public class GeminiChatClient {
 
     /**
      * Models tried after the configured one, in order.
+     * <p>
+     * The 2.0/2.5-era IDs that used to live here are retired — every one returned
+     * 404, so the whole chain fell through to OpenRouter on every request and
+     * burned its 50-per-day free cap. Only list IDs that ListModels actually
+     * reports for the deployed key, or this silently regresses to the same state:
+     * {@code GET /v1beta/models} filtered to those supporting generateContent.
+     * </p>
      */
     private static final List<String> FALLBACK_MODELS = List.of(
-            "models/gemini-2.5-flash",
-            "models/gemini-2.0-flash",
-            "models/gemini-2.0-flash-lite",
-            "models/gemini-2.5-pro"
+            "models/gemini-3.5-flash-lite",
+            "models/gemini-3.1-flash-lite"
     );
 
     /**

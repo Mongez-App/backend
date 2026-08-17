@@ -76,7 +76,10 @@ gemini:
   vision:
     model: gemini-2.0-flash
   chat:
-    model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
+    # Must be an ID the deployed key can actually reach. gemini-2.0-flash sat here
+    # until it was retired, which 404'd the entire Gemini chain and pushed all chat
+    # traffic onto the OpenRouter fallback.
+    model: ${GEMINI_CHAT_MODEL:gemini-3.5-flash-lite}
     max-output-tokens: 2048
     temperature: 0.3
 

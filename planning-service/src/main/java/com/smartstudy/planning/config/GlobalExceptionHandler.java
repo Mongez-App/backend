@@ -1,6 +1,7 @@
 package com.smartstudy.planning.config;
 
 import com.smartstudy.planning.dto.response.ApiErrorResponse;
+import com.smartstudy.planning.exception.OrganizationLookupUnavailableException;
 import com.smartstudy.planning.exception.ValidationException;
 import com.smartstudy.shared.exception.BadRequestException;
 import com.smartstudy.shared.exception.ConflictException;
@@ -104,6 +105,18 @@ public class GlobalExceptionHandler {
                 ex.getDetails()
         );
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(OrganizationLookupUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleOrgLookupUnavailable(OrganizationLookupUnavailableException ex) {
+        log.error("OrganizationLookupUnavailableException: {}", ex.getMessage(), ex);
+        ApiErrorResponse error = new ApiErrorResponse(
+                false,
+                "Service Unavailable",
+                "Could not reach the identity service to resolve the organization. Please try again.",
+                null
+        );
+        return new ResponseEntity<>(error, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

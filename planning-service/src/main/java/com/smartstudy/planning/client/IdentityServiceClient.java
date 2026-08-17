@@ -1,5 +1,6 @@
 package com.smartstudy.planning.client;
 
+import com.smartstudy.planning.dto.response.OrganizationSummaryData;
 import com.smartstudy.planning.dto.response.UserPreferencesData;
 import com.smartstudy.planning.dto.response.UserSummaryData;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -28,4 +29,14 @@ public interface IdentityServiceClient {
     @GetMapping("/internal/users/lookup")
     List<UserSummaryData> lookupUsers(@RequestHeader("X-User-Id") String callerId,
                                       @RequestParam("ids") List<String> ids);
+
+    /**
+     * Resolves organization ids to their display names. Ids with no
+     * organization behind them are absent from the result rather than an error,
+     * so an empty list means "no such organization" — a real answer, distinct
+     * from the transport failure the fallback turns into an exception.
+     */
+    @GetMapping("/internal/organizations/lookup")
+    List<OrganizationSummaryData> lookupOrganizations(@RequestHeader("X-User-Id") String callerId,
+                                                      @RequestParam("ids") List<String> ids);
 }

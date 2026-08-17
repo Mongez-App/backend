@@ -24,7 +24,7 @@ eureka:
 gemini:
   api-key: ${GEMINI_API_KEY:}
   chat:
-    model: ${GEMINI_CHAT_MODEL:gemini-2.0-flash}
+    model: ${GEMINI_CHAT_MODEL:gemini-3.5-flash-lite}
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}

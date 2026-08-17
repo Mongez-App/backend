@@ -4,6 +4,7 @@ import com.smartstudy.planning.client.IdentityServiceClient;
 import com.smartstudy.planning.config.StorageProperties;
 import com.smartstudy.planning.dto.request.OrgCreateTeamRequest;
 import com.smartstudy.planning.exception.OrgApiException;
+import com.smartstudy.planning.exception.OrganizationLookupUnavailableException;
 import com.smartstudy.planning.model.Team;
 import com.smartstudy.planning.repository.CourseRepository;
 import com.smartstudy.planning.repository.EventRepository;
@@ -22,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +49,7 @@ class OrganizationAdminTeamServiceTest {
     @Mock private FileStorageService fileStorageService;
     @Mock private StorageProperties storageProperties;
     @Mock private IdentityServiceClient identityServiceClient;
+    @Mock private OrganizationNameResolver organizationNameResolver;
 
     @InjectMocks
     private OrganizationAdminService service;
@@ -133,5 +136,44 @@ class OrganizationAdminTeamServiceTest {
 
         assertEquals(400, ex.getStatus().value());
         assertTrue(ex.getMessage().contains("spaces"));
+    }
+
+    // X-User-Id carries the organization's uid, not its name, so the name has to
+    // be resolved from identity-service and copied onto the team. Teams saved
+    // without it drop out of organization-name search and pass the null on to
+    // every course created under them.
+
+    @Test
+    void createTeam_stampsTheResolvedOrganizationName() {
+        stubSave();
+        lenient().when(teamRepository.findByInviteCode(anyString())).thenReturn(Optional.empty());
+        when(organizationNameResolver.resolve(ORG_ID)).thenReturn("Acme University");
+
+        service.createTeam(ORG_ID, new OrgCreateTeamRequest("Team A", null, null));
+
+        assertEquals("Acme University", captureSavedTeam().getOrganizationName());
+    }
+
+    @Test
+    void createTeam_unresolvableOrganizationStillCreatesTheTeam() {
+        stubSave();
+        lenient().when(teamRepository.findByInviteCode(anyString())).thenReturn(Optional.empty());
+        when(organizationNameResolver.resolve(ORG_ID)).thenReturn(null);
+
+        service.createTeam(ORG_ID, new OrgCreateTeamRequest("Team A", null, null));
+
+        assertNull(captureSavedTeam().getOrganizationName());
+    }
+
+    @Test
+    void createTeam_failsRatherThanSaveANullNameWhenIdentityServiceIsDown() {
+        lenient().when(teamRepository.findByInviteCode(anyString())).thenReturn(Optional.empty());
+        when(organizationNameResolver.resolve(ORG_ID))
+                .thenThrow(new OrganizationLookupUnavailableException("identity-service is unreachable.", null));
+
+        assertThrows(OrganizationLookupUnavailableException.class, () ->
+                service.createTeam(ORG_ID, new OrgCreateTeamRequest("Team A", null, null)));
+
+        verify(teamRepository, never()).save(any());
     }
 }

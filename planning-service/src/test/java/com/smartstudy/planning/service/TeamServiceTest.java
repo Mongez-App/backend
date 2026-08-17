@@ -50,6 +50,9 @@ class TeamServiceTest {
     @Mock
     private TaskRepository taskRepository;
 
+    @Mock
+    private OrganizationNameResolver organizationNameResolver;
+
     @InjectMocks
     private TeamService teamService;
 

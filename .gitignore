@@ -38,3 +38,6 @@ target/
 application-local.yml
 *.env
 firebase-service-account*.json
+
+# Never commit service credentials
+credentials/

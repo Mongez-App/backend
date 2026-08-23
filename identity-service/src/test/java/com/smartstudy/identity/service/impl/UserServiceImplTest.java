@@ -35,6 +35,9 @@ class UserServiceImplTest {
     @Mock
     private PlanningServiceClient planningServiceClient;
 
+    @Mock
+    private RoadmapRescheduleTrigger roadmapRescheduleTrigger;
+
     @InjectMocks
     private UserServiceImpl userService;
 

@@ -561,9 +561,12 @@ public class OrganizationAdminService {
     }
 
     @Transactional(readOnly = true)
-    public Path resolveMaterialFile(UUID materialId) {
+    public Path resolveMaterialFile(String orgId, UUID materialId) {
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> OrgApiException.notFound("Material with the given ID was not found."));
+        if (!orgId.equals(material.getUserId())) {
+            throw OrgApiException.forbidden("You do not have permission to access this material.");
+        }
         Path path;
         if (material.getFilePath() != null && !material.getFilePath().isBlank()) {
             path = fileStorageService.resolve(material.getFilePath());

@@ -33,6 +33,10 @@ public class SessionService {
     public SessionResponse startSession(String userId, StartSessionRequest request) {
         log.info("Starting session for userId: {} | courseId: {}", userId, request.courseId());
         courseService.getOwnedCourse(userId, request.courseId());
+        if (request.linkedTaskId() != null) {
+            taskRepository.findByIdAndUserId(request.linkedTaskId(), userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND"));
+        }
         StudySession session = StudySession.builder()
                 .userId(userId)
                 .courseId(request.courseId())

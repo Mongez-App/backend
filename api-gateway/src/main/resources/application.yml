@@ -99,6 +99,11 @@ firebase:
   credentials-path: ${FIREBASE_CREDENTIALS:}
   credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
 
+# Shared secret appended to authenticated downstream requests as
+# X-Gateway-Secret. Downstream services reject X-User-Id unless it matches.
+gateway:
+  shared-secret: ${GATEWAY_SHARED_SECRET:}
+
 eureka:
   client:
     register-with-eureka: true

@@ -188,7 +188,7 @@ public class OrganizationAdminController {
             @RequestHeader(value = "X-User-Id", required = false) String orgId,
             @PathVariable UUID materialId) {
         requireOrg(orgId);
-        Path path = organizationAdminService.resolveMaterialFile(materialId);
+        Path path = organizationAdminService.resolveMaterialFile(orgId, materialId);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(new FileSystemResource(path));

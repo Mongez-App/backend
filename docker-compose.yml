@@ -50,6 +50,7 @@ services:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
       - EUREKA_INSTANCE_HOSTNAME=api-gateway
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
+      - GATEWAY_SHARED_SECRET=${GATEWAY_SHARED_SECRET:-}
     depends_on:
       eureka:
         condition: service_healthy
@@ -73,6 +74,7 @@ services:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:-http://eureka:8761/eureka/}
       - EUREKA_INSTANCE_HOSTNAME=identity-service
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-/app/credentials/firebase-admin.json}
+      - GATEWAY_SHARED_SECRET=${GATEWAY_SHARED_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,6 +107,7 @@ services:
       - MATERIAL_STORAGE_DIR=/app/uploads/materials
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - GATEWAY_SHARED_SECRET=${GATEWAY_SHARED_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

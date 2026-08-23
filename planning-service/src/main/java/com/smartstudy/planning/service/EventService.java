@@ -19,8 +19,10 @@ import com.smartstudy.shared.exception.ConflictException;
 import com.smartstudy.shared.logging.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -69,40 +71,45 @@ public class EventService {
     @Transactional
     public EventsResponse createEvents(String userId, List<CreateEventRequest> requests) {
         log.info("Creating {} events for userId: {}", requests.size(), userId);
-        List<EventResponse> createdResponses = new ArrayList<>();
-        List<String> validationErrors = new ArrayList<>();
-        List<Instant[]> validatedRanges = new ArrayList<>();
 
+        // Pass 1: validate everything up front. If any event is invalid we throw
+        // BEFORE persisting anything, so the transaction never rolls back a mix
+        // of created and rejected events.
+        List<String> validationErrors = new ArrayList<>();
+        List<Instant[]> parsedRanges = new ArrayList<>();
         for (CreateEventRequest request : requests) {
             try {
                 validateEventRequest(request);
                 Instant startInstant = parseInstant(request.startDate());
                 Instant endInstant = parseInstant(request.endDate());
-
                 if (endInstant.isBefore(startInstant)) {
                     validationErrors.add("Event '" + request.title() + "': endDate must be equal to or after startDate.");
+                } else {
+                    parsedRanges.add(new Instant[]{startInstant, endInstant});
+                }
+            } catch (ValidationException ex) {
+                validationErrors.addAll(ex.getDetails());
+            }
+        }
+        if (!validationErrors.isEmpty()) {
+            throw new ValidationException("Validation failed for one or more events.", validationErrors);
+        }
+
+        // Pass 2: persist, skipping duplicates and overlaps instead of failing.
+        List<EventResponse> createdResponses = new ArrayList<>();
+        List<Instant[]> validatedRanges = new ArrayList<>();
+        for (int i = 0; i < requests.size(); i++) {
+            CreateEventRequest request = requests.get(i);
+            Instant startInstant = parsedRanges.get(i)[0];
+            Instant endInstant = parsedRanges.get(i)[1];
+
+            if ("system".equals(request.eventType())) {
+                boolean isDuplicate = !eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(userId, "system", request.title(), startInstant).isEmpty();
+                if (isDuplicate) {
+                    log.warn("Skipping duplicate system event '{}' for user {} on {}", request.title(), userId, startInstant);
                     continue;
                 }
-
-                if ("system".equals(request.eventType())) {
-                    boolean isDuplicate = !eventRepository.findByUserIdAndEventTypeAndTitleAndStartDate(userId, "system", request.title(), startInstant).isEmpty();
-                    if (isDuplicate) {
-                        log.warn("Skipping duplicate system event '{}' for user {} on {}", request.title(), userId, startInstant);
-                        continue;
-                    }
-                    Event event = Event.builder()
-                            .userId(userId)
-                            .title(request.title())
-                            .startDate(startInstant)
-                            .endDate(endInstant)
-                            .eventType(request.eventType())
-                            .canStudyThrough(request.canStudyThrough())
-                            .build();
-                    Event saved = eventRepository.save(event);
-                    createdResponses.add(toEventResponse(saved));
-                    continue;
-                }
-
+            } else {
                 List<Event> overlapping = eventRepository.findOverlappingEvents(userId, null, startInstant, endInstant);
                 if (!overlapping.isEmpty()) {
                     log.warn("Skipping overlapping event '{}' for user {} (overlaps with '{}')", request.title(), userId, overlapping.getFirst().getTitle());
@@ -121,24 +128,18 @@ public class EventService {
                     continue;
                 }
                 validatedRanges.add(new Instant[]{startInstant, endInstant});
-
-                Event event = Event.builder()
-                        .userId(userId)
-                        .title(request.title())
-                        .startDate(startInstant)
-                        .endDate(endInstant)
-                        .eventType(request.eventType())
-                        .canStudyThrough(request.canStudyThrough())
-                        .build();
-                Event saved = eventRepository.save(event);
-                createdResponses.add(toEventResponse(saved));
-            } catch (ValidationException ex) {
-                validationErrors.addAll(ex.getDetails());
             }
-        }
 
-        if (!validationErrors.isEmpty()) {
-            throw new ValidationException("Validation failed for one or more events.", validationErrors);
+            Event event = Event.builder()
+                    .userId(userId)
+                    .title(request.title())
+                    .startDate(startInstant)
+                    .endDate(endInstant)
+                    .eventType(request.eventType())
+                    .canStudyThrough(request.canStudyThrough())
+                    .build();
+            Event saved = eventRepository.save(event);
+            createdResponses.add(toEventResponse(saved));
         }
 
         return new EventsResponse(
@@ -152,6 +153,11 @@ public class EventService {
     @Transactional
     public AlertResponse createCourseEvent(String userId, UUID courseId, CreateCourseEventRequest request) {
         log.info("Creating event for userId: {} | courseId: {}", userId, courseId);
+
+        // The course must exist and belong to the caller — never attach events
+        // to another user's course.
+        Course course = courseRepository.findByIdAndUserId(courseId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND"));
 
         EventType eventType = EventType.fromWireValue(request.eventType())
                 .orElseThrow(() -> new ValidationException("Invalid event data.",
@@ -168,16 +174,14 @@ public class EventService {
                 .userId(userId)
                 .title(request.title())
                 .startDate(eventInstant)
-                .courseId(courseId)
+                .courseId(course.getId())
                 .eventType(eventType.wireValue())
                 .build();
         Event saved = eventRepository.save(event);
 
         if (eventType == EventType.EXAM) {
-            courseRepository.findByIdAndUserId(courseId, userId).ifPresent(course -> {
-                course.setExamDate(eventInstant);
-                courseRepository.save(course);
-            });
+            course.setExamDate(eventInstant);
+            courseRepository.save(course);
         }
 
         ScheduleResult rescheduleResult = rescheduleCourseTasksBeforeEvent(saved);

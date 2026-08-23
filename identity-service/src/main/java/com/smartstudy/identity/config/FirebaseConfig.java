@@ -3,7 +3,9 @@ package com.smartstudy.identity.config;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.smartstudy.shared.logging.LoggerFactory;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
@@ -15,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 public class FirebaseConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(FirebaseConfig.class);
 
     @Value("${firebase.credentials-json:}")
     private String credentialsJson;
@@ -29,7 +33,7 @@ public class FirebaseConfig {
         }
         try (InputStream in = resolveCredentialsStream()) {
             if (in == null) {
-                System.err.println("No Firebase credentials configured — Firebase not initialized.");
+                log.error("No Firebase credentials configured — Firebase not initialized. Authentication will fail at runtime.");
                 return;
             }
             GoogleCredentials credentials = GoogleCredentials.fromStream(in);
@@ -38,7 +42,7 @@ public class FirebaseConfig {
                     .build();
             FirebaseApp.initializeApp(options);
         } catch (IOException e) {
-            System.err.println("Failed to initialize Firebase: " + e.getMessage());
+            log.error("Failed to initialize Firebase: {}", e.getMessage());
         }
     }
 

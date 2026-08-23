@@ -63,7 +63,6 @@ public class OrganizationAuthServiceImpl implements OrganizationAuthService {
     }
 
     @Override
-    @Transactional
     public void logout(String uid) {
         try {
             FirebaseAuth.getInstance().revokeRefreshTokens(uid);

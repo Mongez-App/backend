@@ -29,6 +29,7 @@ public class TaskService {
     private final CourseRepository courseRepository;
     private final TaskMapper taskMapper;
     private final TaskPriorityService taskPriorityService;
+    private final CourseService courseService;
 
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasks(String userId, LocalDate date) {
@@ -65,6 +66,9 @@ public class TaskService {
     @Transactional
     public TaskResponse createTask(String userId, CreateTaskRequest request) {
         log.info("Creating task for userId: {} | title: {}", userId, request.title());
+        // The course must exist and be visible to the caller (owned or a team
+        // course the user is a member of) — never link tasks to foreign courses.
+        courseService.getOwnedCourse(userId, request.courseId());
         LocalDate scheduledDate = request.date() != null ? request.date() : LocalDate.now();
         Priority priority = request.priority() != null
                 ? request.priority()

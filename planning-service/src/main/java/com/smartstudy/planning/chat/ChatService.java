@@ -126,15 +126,20 @@ public class ChatService {
                                           int page, int size) {
         validateTaskOwnership(userId, taskId);
 
+        // Clamp client-supplied paging so a huge `size` can't dump the whole
+        // history (or a negative page can't throw) in one query.
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+
         Page<ChatMessage> messagePage = chatMessageRepository
-                .findByTaskIdOrderByCreatedAtAsc(taskId, PageRequest.of(page, size));
+                .findByTaskIdOrderByCreatedAtAsc(taskId, PageRequest.of(safePage, safeSize));
 
         List<ChatMessageResponse> messages = messagePage.getContent().stream()
                 .map(this::toMessageResponse)
                 .toList();
 
         return new ChatHistoryResponse(
-                new PaginationMeta(page, size, messagePage.hasNext()),
+                new PaginationMeta(safePage, safeSize, messagePage.hasNext()),
                 messages
         );
     }

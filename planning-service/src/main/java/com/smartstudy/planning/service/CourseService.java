@@ -1,6 +1,5 @@
 package com.smartstudy.planning.service;
 
-import com.smartstudy.planning.ai.model.AgentPlanResult;
 import com.smartstudy.planning.dto.request.CreateCourseRequest;
 import com.smartstudy.planning.dto.request.CreateMaterialRequest;
 import com.smartstudy.planning.dto.request.UpdateCourseRequest;
@@ -38,7 +37,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -64,6 +62,7 @@ public class CourseService {
 
     private static final Logger log = LoggerFactory.getLogger(CourseService.class);
     private static final String SCRAPER_URL = "https://mongez-scraper.vercel.app/api/v1/imports";
+    private static final long MAX_MATERIAL_BYTES = 25L * 1024 * 1024;
     private final CourseRepository courseRepository;
     private final MaterialRepository materialRepository;
     private final StudyBlockRepository studyBlockRepository;
@@ -72,12 +71,12 @@ public class CourseService {
     private final EventRepository eventRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final QdrantIndexingService qdrantIndexingService;
-    private final StudyPlannerAgent studyPlannerAgent;
     private final TaskPriorityService taskPriorityService;
     private final UserPreferencesService userPreferencesService;
     private final RestTemplateBuilder restTemplateBuilder;
     private final FileStorageService fileStorageService;
     private final RoadmapService roadmapService;
+    private final MaterialProcessingTrigger materialProcessingTrigger;
 
     @Value("${smartstudy.url-course.min-split-minutes:1}")
     private int minSplitMinutes;
@@ -343,6 +342,12 @@ public class CourseService {
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
         }
+        if (!isPdf(file)) {
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "MATERIAL_FILE_NOT_PDF");
+        }
+        if (file.getSize() > MAX_MATERIAL_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "MATERIAL_FILE_TOO_LARGE");
+        }
         Course course = getOwnedCourse(userId, courseId);
         Material material = Material.builder()
                 .courseId(courseId)
@@ -365,7 +370,8 @@ public class CourseService {
         saved.setPageCount(countPdfPages(fileStorageService.resolve(saved.getFilePath())));
         saved.setStatus(MaterialStatus.PROCESSING);
         materialRepository.save(saved);
-        triggerAgentForMaterial(userId, courseId, saved.getId(), dailyStudyMinutes, preferredDays);
+        materialProcessingTrigger.processMaterial(userId, courseId, saved.getId(),
+                dailyStudyMinutes, preferredDays);
         return toMaterialResponse(saved);
     }
 
@@ -412,6 +418,12 @@ public class CourseService {
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MATERIAL_FILE_EMPTY");
         }
+        if (!isPdf(file)) {
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "MATERIAL_FILE_NOT_PDF");
+        }
+        if (file.getSize() > MAX_MATERIAL_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "MATERIAL_FILE_TOO_LARGE");
+        }
 
         try {
             String filePath = fileStorageService.save(
@@ -428,51 +440,14 @@ public class CourseService {
         material.setProcessingStartedAt(Instant.now());
         materialRepository.save(material);
 
-        triggerAgentForMaterial(userId, material.getCourseId(), materialId, dailyStudyMinutes, preferredDays);
+        materialProcessingTrigger.processMaterial(userId, material.getCourseId(), materialId,
+                dailyStudyMinutes, preferredDays);
 
         return new UploadMaterialResponse(
                 materialId,
                 MaterialStatus.PROCESSING.name(),
                 "File uploaded successfully. AI processing has started in the background."
         );
-    }
-
-    @Async
-    public void triggerAgentForMaterial(String userId, UUID courseId, UUID materialId,
-                                        int dailyStudyMinutes, String preferredDays) {
-        Material material = materialRepository.findByIdAndUserId(materialId, userId)
-                .orElseThrow(() -> new IllegalStateException("Material not found for agent: " + materialId));
-        material.setStatus(MaterialStatus.PROCESSING);
-        materialRepository.save(material);
-
-        try {
-            boolean isIncremental = taskRepository.existsByCourseIdAndUserIdAndMaterialIdIsNotNull(courseId, userId);
-            AgentPlanResult result = studyPlannerAgent.generatePlan(userId, courseId, materialId, dailyStudyMinutes, preferredDays, isIncremental);
-
-            if ("error".equals(result.status()) || "over_capacity".equals(result.status())) {
-                material.setStatus(MaterialStatus.FAILED);
-                log.error("Agent failed for material {}: {}", materialId, result.alert().message());
-                material.setErrorMessage(result.alert().message());
-            } else {
-                material.setStatus(MaterialStatus.READY);
-                material.setProcessedAt(Instant.now());
-                log.info("Agent completed for material {}: status={}", materialId, result.status());
-
-                try {
-                    rescheduleRoadmap(userId);
-                } catch (Exception rescheduleEx) {
-                    // Keep the material processing result intact even if roadmap recalculation fails.
-                    log.warn("Roadmap reschedule failed after material {} processing: {}", materialId,
-                            rescheduleEx.getMessage(), rescheduleEx);
-                }
-            }
-            materialRepository.save(material);
-        } catch (Exception ex) {
-            log.error("Unexpected exception during agent processing for material {}: {}", materialId, ex.getMessage(), ex);
-            material.setStatus(MaterialStatus.FAILED);
-            material.setErrorMessage(ex.getMessage());
-            materialRepository.save(material);
-        }
     }
 
     @Transactional
@@ -511,6 +486,18 @@ public class CourseService {
             log.warn("Could not read page count from {}: {}", pdfPath, ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Content-type and filename are client-controlled hints, but together with
+     * the size limit they keep obvious non-PDF payloads out before the file is
+     * written; PDFBox page counting later rejects corrupted/mislabeled files.
+     */
+    private boolean isPdf(MultipartFile file) {
+        String contentType = file.getContentType();
+        String name = file.getOriginalFilename();
+        return "application/pdf".equalsIgnoreCase(contentType)
+                || (name != null && name.toLowerCase().endsWith(".pdf"));
     }
 
     public Course getOwnedCourse(String userId, UUID courseId) {

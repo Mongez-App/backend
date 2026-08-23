@@ -283,15 +283,26 @@ public class TeamService {
         if (inviteCode == null || inviteCode.isBlank()) {
             inviteCode = generateUniqueInviteCode();
         } else {
-            if (teamRepository.findByInviteCode(inviteCode).isPresent()) {
+            String candidate = inviteCode.trim();
+            if (candidate.length() > 64) {
+                throw new BadRequestException("INVALID_INVITE_CODE", "Invite code must be at most 64 characters.");
+            }
+            if (candidate.chars().anyMatch(Character::isWhitespace)) {
+                throw new BadRequestException("INVALID_INVITE_CODE", "Invite code must not contain spaces.");
+            }
+            if (teamRepository.findByInviteCode(candidate).isPresent()) {
                 throw new ConflictException("INVITE_CODE_EXISTS", "Invite code already in use.");
             }
+            inviteCode = candidate;
+        }
+        if (request.name().trim().isEmpty()) {
+            throw new BadRequestException("INVALID_TEAM_NAME", "Team name must not be blank.");
         }
         // Resolves to null when orgId is not an organization account, which is the
         // normal case for a user-created team.
         Team team = Team.builder()
                 .id(UUID.randomUUID().toString())
-                .name(request.name())
+                .name(request.name().trim())
                 .organizationId(orgId)
                 .organizationName(organizationNameResolver.resolve(orgId))
                 .imageUrl(request.imageUrl())

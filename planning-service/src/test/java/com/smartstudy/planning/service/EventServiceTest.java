@@ -79,6 +79,8 @@ class EventServiceTest {
             return e;
         });
         lenient().when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(courseRepository.findByIdAndUserId(eq(courseId), eq(userId))).thenAnswer(invocation ->
+                java.util.Optional.of(Course.builder().id(courseId).userId(userId).name("Test Course").build()));
         lenient().when(userPreferencesService.resolve(any(String.class)))
                 .thenReturn(new UserPreferencesService.StudyPreferences(60, java.util.EnumSet.allOf(java.time.DayOfWeek.class), 0, java.util.Set.of()));
         lenient().when(roadmapService.reschedule(any(String.class), anyInt(), any(String.class)))

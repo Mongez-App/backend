@@ -106,3 +106,8 @@ chat:
   history-context-size: 20
   qdrant-search-limit: 5
   qdrant-score-threshold: 0.5
+
+# Shared secret the API gateway appends as X-Gateway-Secret; requests that
+# present X-User-Id without it are rejected when a secret is configured.
+gateway:
+  shared-secret: ${GATEWAY_SHARED_SECRET:}

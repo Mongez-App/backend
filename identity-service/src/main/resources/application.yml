@@ -26,3 +26,8 @@ management:
 firebase:
   credentials-path: ${FIREBASE_CREDENTIALS:}
   credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
+
+# Shared secret the API gateway appends as X-Gateway-Secret; required to
+# accept gateway-forwarded X-User-Id headers.
+gateway:
+  shared-secret: ${GATEWAY_SHARED_SECRET:}
